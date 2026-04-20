@@ -5,13 +5,13 @@ import { LogOut, Calendar, Clock, BookOpen, MapPin, Layers, CheckCircle2, AlertC
 
 const DAYS = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const SLOTS = [
-    { id: 0, time: '09:00–10:00' },
-    { id: 1, time: '10:15–11:15' },
-    { id: 2, time: '11:15–12:15' },
-    { id: 3, time: '13:15–14:15' },
-    { id: 4, time: '14:15–15:15' },
-    { id: 5, time: '15:30–16:30' },
-    { id: 6, time: '16:30–17:30' }
+    { id: 0, time: '09:00 AM – 10:00 AM' },
+    { id: 1, time: '10:15 AM – 11:15 AM' },
+    { id: 2, time: '11:15 AM – 12:15 PM' },
+    { id: 3, time: '01:15 PM – 02:15 PM' },
+    { id: 4, time: '02:15 PM – 03:15 PM' },
+    { id: 5, time: '03:30 PM – 04:30 PM' },
+    { id: 6, time: '04:30 PM – 05:30 PM' }
 ];
 
 const STATUS_CONFIG = {
@@ -24,7 +24,13 @@ const STATUS_CONFIG = {
 
 const ProfessorDashboard = () => {
     const { user, logout } = useContext(AuthContext);
+    const [currentTime, setCurrentTime] = useState(new Date());
     const [timetable, setTimetable] = useState([]);
+    
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
     const [overrides, setOverrides] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('today'); // 'today' | 'weekly'
@@ -35,9 +41,7 @@ const ProfessorDashboard = () => {
 
     // Get current day of week (1-5, mapping Sat/Sun to Mon for demo purposes or showing "Weekend")
     const getTodayDay = () => {
-        const d = new Date().getDay();
-        if (d === 0 || d === 6) return 1; // Default to Monday on weekends for demo
-        return d;
+        return new Date().getDay(); // 0 (Sun) - 6 (Sat)
     };
     const todayDay = getTodayDay();
 
@@ -129,13 +133,29 @@ const ProfessorDashboard = () => {
         <div className="min-h-screen pb-20 bg-slate-50 font-sans">
             {/* Header */}
             <header className="bg-white border-b px-6 py-6 sticky top-0 z-30 shadow-sm flex justify-between items-center backdrop-blur-md bg-white/80">
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-100">
-                        <Calendar size={28} />
+                <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-100">
+                            <Calendar size={28} />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-none">Professor Portal</h1>
+                            <p className="text-slate-400 font-bold text-xs mt-1 uppercase tracking-wider">{user.name}</p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-none">Professor Portal</h1>
-                        <p className="text-slate-400 font-bold text-xs mt-1 uppercase tracking-wider">{user.name}</p>
+
+                    <div className="h-10 w-px bg-slate-200 hidden lg:block"></div>
+
+                    <div className="hidden lg:flex flex-col">
+                        <div className="flex items-center gap-2 text-indigo-600 font-black text-[10px] uppercase tracking-widest">
+                            <Clock size={12} />
+                            <span>System Live Status</span>
+                        </div>
+                        <div className="text-slate-900 font-black text-xs">
+                            {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                            <span className="mx-2 text-slate-300">|</span>
+                            <span className="text-indigo-600">{currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                        </div>
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -174,58 +194,82 @@ const ProfessorDashboard = () => {
 
             <main className="max-w-4xl mx-auto p-4 md:p-8">
                 {activeTab === 'today' ? (
-                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className="flex items-center justify-between px-4">
-                            <h2 className="text-3xl font-black text-slate-900 tracking-tight">{DAYS[todayDay]}</h2>
-                            <span className="px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full font-black text-[10px] uppercase tracking-[0.2em]">Live Status Active</span>
+                    (todayDay === 0 || todayDay === 6) ? (
+                        <div className="h-[60vh] flex flex-col items-center justify-center text-center space-y-8 animate-in zoom-in-95 duration-700">
+                            <div className="w-32 h-32 bg-indigo-50 rounded-[2.5rem] flex items-center justify-center text-indigo-600 shadow-xl shadow-indigo-100/50">
+                                <Calendar size={64} className="opacity-80" />
+                            </div>
+                            <div className="space-y-2">
+                                <h2 className="text-5xl font-black text-slate-900 tracking-tight">Today is a Holiday</h2>
+                                <p className="text-slate-400 font-bold uppercase tracking-[0.3em] text-xs">Recharge for the upcoming week</p>
+                            </div>
+                            
+                            <div className="max-w-md bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 relative overflow-hidden group">
+                                <div className="absolute top-0 left-0 w-2 h-full bg-indigo-600"></div>
+                                <div className="text-indigo-600 mb-6 flex justify-center">
+                                    <BookOpen size={40} className="opacity-20 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                                <p className="text-xl font-black text-slate-800 leading-relaxed italic">
+                                    "Education is the most powerful weapon which you can use to change the world."
+                                </p>
+                                <div className="mt-6 text-xs font-black text-slate-400 uppercase tracking-widest">— Nelson Mandela</div>
+                            </div>
                         </div>
-                        
-                        <div className="grid gap-4">
-                            {SLOTS.map(slot => {
-                                const status = getSlotStatus(todayDay, slot.id);
-                                const entry = getTimetableEntry(todayDay, slot.id);
-                                const config = STATUS_CONFIG[status];
-                                const StatusIcon = config.icon;
+                    ) : (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="flex items-center justify-between px-4">
+                                <h2 className="text-3xl font-black text-slate-900 tracking-tight">{DAYS[todayDay]}</h2>
+                                <span className="px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full font-black text-[10px] uppercase tracking-[0.2em]">Live Status Active</span>
+                            </div>
+                            
+                            <div className="grid gap-4">
+                                {SLOTS.map(slot => {
+                                    const status = getSlotStatus(todayDay, slot.id);
+                                    const entry = getTimetableEntry(todayDay, slot.id);
+                                    const config = STATUS_CONFIG[status];
+                                    const StatusIcon = config.icon;
 
-                                return (
-                                    <div 
-                                        key={slot.id}
-                                        onClick={() => setShowStatusModal({ day: todayDay, slot: slot.id, currentStatus: status })}
-                                        className="bg-white rounded-[2rem] p-5 shadow-lg shadow-slate-200/50 border border-slate-100 flex items-center gap-6 cursor-pointer hover:border-indigo-200 transition-all group active:scale-[0.98]"
-                                    >
-                                        <div className="w-20 text-center border-r-2 border-slate-50 pr-6">
-                                            <div className="text-xs font-black text-slate-900 leading-none">{slot.time.split('–')[0]}</div>
-                                            <div className="text-[10px] font-bold text-slate-400 mt-1">{slot.time.split('–')[1]}</div>
-                                        </div>
-                                        
-                                        <div className={`w-12 h-12 rounded-2xl ${config.color} flex items-center justify-center text-white shadow-lg`}>
-                                            <StatusIcon size={24} />
-                                        </div>
-
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2">
-                                                <h3 className="font-black text-lg text-slate-800 tracking-tight">
-                                                    {entry ? entry.subject : config.label}
-                                                </h3>
-                                                {entry && (
-                                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-400 rounded-md text-[8px] font-black uppercase tracking-widest">
-                                                        {entry.year} • Div {entry.division}
-                                                    </span>
-                                                )}
+                                    return (
+                                        <div 
+                                            key={slot.id}
+                                            onClick={() => setShowStatusModal({ day: todayDay, slot: slot.id, currentStatus: status })}
+                                            className="bg-white rounded-[2rem] p-5 shadow-lg shadow-slate-200/50 border border-slate-100 flex items-center gap-6 cursor-pointer hover:border-indigo-200 transition-all group active:scale-[0.98]"
+                                        >
+                                            <div className="w-24 text-center border-r-2 border-slate-50 pr-6 space-y-1">
+                                                <div className="text-xs font-black text-slate-900 leading-none">{slot.time.split(' – ')[0]}</div>
+                                                <div className="text-slate-300 font-black">-</div>
+                                                <div className="text-xs font-black text-slate-900 leading-none">{slot.time.split(' – ')[1]}</div>
                                             </div>
-                                            <div className="flex items-center gap-1.5 text-slate-400 font-bold text-[10px] mt-0.5">
-                                                <MapPin size={12} /> {entry ? entry.location : 'Campus'}
+                                            
+                                            <div className={`w-12 h-12 rounded-2xl ${config.color} flex items-center justify-center text-white shadow-lg`}>
+                                                <StatusIcon size={24} />
+                                            </div>
+
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="font-black text-lg text-slate-800 tracking-tight">
+                                                        {entry ? entry.subject : config.label}
+                                                    </h3>
+                                                    {entry && (
+                                                        <span className="px-2 py-0.5 bg-slate-100 text-slate-400 rounded-md text-[8px] font-black uppercase tracking-widest">
+                                                            {entry.year} • Div {entry.division}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-1.5 text-slate-400 font-bold text-[10px] mt-0.5">
+                                                    <MapPin size={12} /> {entry ? entry.location : 'Campus'}
+                                                </div>
+                                            </div>
+
+                                            <div className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all ${config.color} ${config.text}`}>
+                                                Change
                                             </div>
                                         </div>
-
-                                        <div className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all ${config.color} ${config.text}`}>
-                                            Change
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                                    );
+                                })}
+                            </div>
                         </div>
-                    </div>
+                    )
                 ) : (
                     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {[1, 2, 3, 4, 5].map(day => (
@@ -244,8 +288,13 @@ const ProfessorDashboard = () => {
                                                 onClick={() => setShowStatusModal({ day, slot: slot.id, currentStatus: status })}
                                                 className={`p-3 rounded-2xl flex flex-col items-center justify-center text-center gap-1.5 cursor-pointer transition-all hover:scale-105 ${config.color} shadow-lg shadow-slate-200/50`}
                                             >
-                                                <span className="text-[8px] font-black uppercase opacity-60 text-white">Slot {slot.id}</span>
-                                                <div className="text-[10px] font-black text-white leading-none whitespace-pre-wrap">{slot.time.split('–').join('\n')}</div>
+                                                <div className="w-1 h-1 bg-white/40 rounded-full mt-1"></div>
+                                                <div className="text-[10px] font-black text-white leading-tight">
+                                                    <div>{slot.time.split(' – ')[0]}</div>
+                                                    <div className="opacity-50">-</div>
+                                                    <div>{slot.time.split(' – ')[1]}</div>
+                                                </div>
+
                                                 <div className="w-1 h-1 bg-white/40 rounded-full mt-1"></div>
                                             </div>
                                         );
@@ -264,9 +313,7 @@ const ProfessorDashboard = () => {
                         <div className="p-8 border-b bg-slate-50/50 flex justify-between items-center">
                             <div>
                                 <h3 className="font-black text-xl text-slate-900 tracking-tight">Update Status</h3>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                                    {DAYS[showStatusModal.day]} • Slot {showStatusModal.slot}
-                                </p>
+                                    {DAYS[showStatusModal.day]} • <span className="font-black text-slate-900">{SLOTS[showStatusModal.slot].time}</span>
                             </div>
                             <button onClick={() => setShowStatusModal(null)} className="p-2 bg-white rounded-xl text-slate-400 hover:text-slate-900 transition-all shadow-sm">
                                 <X size={20} />
