@@ -7,15 +7,15 @@ const { requireAdmin } = require('../middleware/auth');
 // Professor Management
 router.post('/professors', requireAdmin, async (req, res) => {
     try {
-        const { name, login_id, password } = req.body;
+        const { name, login_id, password, designation } = req.body;
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
         
         const insertQuery = `
-            INSERT INTO users (name, login_id, password, role)
-            VALUES ($1, $2, $3, 'PROFESSOR') RETURNING id, name, login_id, role
+            INSERT INTO users (name, login_id, password, role, designation)
+            VALUES ($1, $2, $3, 'PROFESSOR', $4) RETURNING id, name, login_id, role, designation
         `;
-        const newProf = await db.query(insertQuery, [name, login_id, hashedPassword]);
+        const newProf = await db.query(insertQuery, [name, login_id, hashedPassword, designation || 'Assistant Professor']);
         res.status(201).json(newProf.rows[0]);
     } catch (error) {
         if (error.code === '23505') {
@@ -28,7 +28,7 @@ router.post('/professors', requireAdmin, async (req, res) => {
 
 router.get('/professors', requireAdmin, async (req, res) => {
     try {
-        const result = await db.query("SELECT id, name, login_id, role FROM users WHERE role = 'PROFESSOR' ORDER BY name ASC");
+        const result = await db.query("SELECT id, name, login_id, role, designation FROM users WHERE role = 'PROFESSOR' ORDER BY name ASC");
         res.json(result.rows);
     } catch (error) {
         res.status(500).json({ error: "Server error" });
@@ -39,6 +39,17 @@ router.delete('/professors/:id', requireAdmin, async (req, res) => {
     try {
         await db.query("DELETE FROM users WHERE id = $1 AND role = 'PROFESSOR'", [req.params.id]);
         res.json({ message: "Professor deleted successfully" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Server error" });
+    }
+});
+
+router.put('/professors/:id', requireAdmin, async (req, res) => {
+    try {
+        const { designation } = req.body;
+        await db.query("UPDATE users SET designation = $1 WHERE id = $2 AND role = 'PROFESSOR'", [designation, req.params.id]);
+        res.json({ message: "Designation updated successfully" });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: "Server error" });
@@ -90,12 +101,13 @@ router.get('/assignments/:class_id', requireAdmin, async (req, res) => {
 
 router.post('/assignments', requireAdmin, async (req, res) => {
     try {
-        const { class_id, professor_id, subject_name } = req.body;
+        const { class_id, professor_id, subject_name, session_type } = req.body;
+        
         const query = `
-            INSERT INTO subject_assignments (class_id, professor_id, subject_name)
-            VALUES ($1, $2, $3) RETURNING *
+            INSERT INTO subject_assignments (class_id, professor_id, subject_name, session_type)
+            VALUES ($1, $2, $3, $4) RETURNING *
         `;
-        const result = await db.query(query, [class_id, professor_id, subject_name]);
+        const result = await db.query(query, [class_id, professor_id, subject_name, session_type]);
         res.status(201).json(result.rows[0]);
     } catch (error) {
         if (error.code === '23505') {
@@ -121,6 +133,48 @@ router.delete('/assignments/reset/:class_id', requireAdmin, async (req, res) => 
         res.json({ message: "All assignments for this class cleared successfully" });
     } catch (error) {
         res.status(500).json({ error: "Server error" });
+    }
+});
+
+// Student Promotion Logic
+router.post('/promote-students', requireAdmin, async (req, res) => {
+    try {
+        const promotionMap = {
+            'SY': 'TY',
+            'TY': 'B.Tech',
+            'B.Tech': 'GRADUATED'
+        };
+
+        const studentsResult = await db.query('SELECT s.*, c.year, c.division FROM students s JOIN classes c ON s.class_id = c.id WHERE s.status = \'ACTIVE\'');
+        
+        for (const student of studentsResult.rows) {
+            const nextYear = promotionMap[student.year];
+            if (nextYear === 'GRADUATED') {
+                await db.query('UPDATE students SET status = \'GRADUATED\' WHERE id = $1', [student.id]);
+            } else if (nextYear) {
+                const classQuery = await db.query('SELECT id FROM classes WHERE year = $1 AND division = $2', [nextYear, student.division]);
+                if (classQuery.rows.length > 0) {
+                    await db.query('UPDATE students SET class_id = $1 WHERE id = $2', [classQuery.rows[0].id, student.id]);
+                }
+            }
+        }
+        
+        res.json({ message: "Students promoted successfully" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Server error during promotion" });
+    }
+});
+
+// New Semester Reset
+router.post('/new-semester', requireAdmin, async (req, res) => {
+    try {
+        await db.query('TRUNCATE TABLE timetable, subject_assignments RESTART IDENTITY CASCADE');
+        await db.query('DELETE FROM professor_status');
+        res.json({ message: "System reset for new semester successfully" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Server error during reset" });
     }
 });
 

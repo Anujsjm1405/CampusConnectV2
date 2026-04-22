@@ -63,6 +63,17 @@ router.post('/status', requireProfessor, async (req, res) => {
             RETURNING *
         `;
         const result = await db.query(query, [professor_id, day_of_week, slot_id, status]);
+        
+        // Emit socket event
+        const io = req.app.get('io');
+        io.emit('status-update', { 
+            professor_id, 
+            day_of_week, 
+            slot_id, 
+            status,
+            professor_name: req.session.user.name 
+        });
+
         res.json(result.rows[0]);
     } catch (error) {
         console.error(error);
@@ -73,13 +84,12 @@ router.post('/status', requireProfessor, async (req, res) => {
 // Bulk update status to 'LEAVE' for specific days
 router.post('/leave', requireProfessor, async (req, res) => {
     try {
-        const { professor_id, days } = req.body; // days is an array of day_of_week (1-5)
+        const { professor_id, days } = req.body;
         
         if (req.session.user.id !== parseInt(professor_id)) {
             return res.status(403).json({ error: "Access denied." });
         }
 
-        // For each day and each slot (0-6), set status to LEAVE
         for (const day of days) {
             for (let slot = 0; slot <= 6; slot++) {
                 await db.query(`
@@ -90,6 +100,15 @@ router.post('/leave', requireProfessor, async (req, res) => {
                 `, [professor_id, day, slot]);
             }
         }
+        
+        // Emit socket event
+        const io = req.app.get('io');
+        io.emit('bulk-status-update', { 
+            professor_id, 
+            days, 
+            status: 'LEAVE',
+            professor_name: req.session.user.name 
+        });
         
         res.json({ message: "Leave applied successfully" });
     } catch (error) {

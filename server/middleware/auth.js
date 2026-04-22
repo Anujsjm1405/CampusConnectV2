@@ -22,4 +22,12 @@ function requireProfessor(req, res, next) {
     }
 }
 
-module.exports = { requireAuth, requireAdmin, requireProfessor };
+function requireStudent(req, res, next) {
+    if (req.session && req.session.user && req.session.user.role === 'STUDENT') {
+        next();
+    } else {
+        res.status(403).json({ error: "Forbidden. Student access required." });
+    }
+}
+
+module.exports = { requireAuth, requireAdmin, requireProfessor, requireStudent };
