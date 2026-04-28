@@ -6,7 +6,7 @@ import {
     LogOut, Plus, Trash2, Users, Calendar, X, ChevronDown, 
     MapPin, AlertCircle, RefreshCcw, BookOpen, Layers, 
     LayoutGrid, UserPlus, ClipboardList, Settings, Search,
-    Filter, Clock, Sun, Moon
+    Filter, Clock, Sun, Moon, GraduationCap, Info
 } from 'lucide-react';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -36,8 +36,14 @@ const AdminDashboard = () => {
     
     const [professors, setProfessors] = useState([]);
     const [timetable, setTimetable] = useState([]);
+    const [masterTimetable, setMasterTimetable] = useState([]);
     const [allClasses, setAllClasses] = useState([]);
     const [assignments, setAssignments] = useState([]);
+    const [students, setStudents] = useState([]);
+    const [promotionModal, setPromotionModal] = useState(false);
+    const [promotionForm, setPromotionForm] = useState({ source_class_id: '', target_class_id: '' });
+    const [masterFilterProf, setMasterFilterProf] = useState('');
+    const [locations, setLocations] = useState([]);
     
     // Global selection state (shared between Timetable and Mapping)
     const [selectedYear, setSelectedYear] = useState('SY');
@@ -51,6 +57,7 @@ const AdminDashboard = () => {
     const [showResetModal, setShowResetModal] = useState(false);
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [showResetMappingModal, setShowResetMappingModal] = useState(false);
+    const [showLocationModal, setShowLocationModal] = useState(false);
     
     const [activeSlot, setActiveSlot] = useState(null);
     const [entryToDelete, setEntryToDelete] = useState(null);
@@ -59,7 +66,8 @@ const AdminDashboard = () => {
 
     // Form states
     const [newProf, setNewProf] = useState({ name: '', login_id: '', password: '', designation: 'Assistant Professor' });
-    const [newEntry, setNewEntry] = useState({ assignment_id: '', location: '', session_type: 'LECTURE', batch: '' });
+    const [newEntry, setNewEntry] = useState({ assignment_id: '', location_id: '', session_type: 'LECTURE', batch: '', class_id: '' });
+    const [newLocation, setNewLocation] = useState({ name: '', type: 'LAB', capacity: '', parent_name: '' });
     const [assignmentForm, setAssignmentForm] = useState({ 
         professor_id: '', 
         subject_name: '', 
@@ -68,6 +76,7 @@ const AdminDashboard = () => {
 
     // Computed
     const [classAssignments, setClassAssignments] = useState([]);
+    const [classAssignmentsForMaster, setClassAssignmentsForMaster] = useState([]);
 
     useEffect(() => {
         fetchInitialData();
@@ -94,16 +103,48 @@ const AdminDashboard = () => {
 
     const fetchInitialData = async () => {
         try {
-            const [profsRes, classesRes, assignRes] = await Promise.all([
+            const [profsRes, classesRes, assignRes, locsRes] = await Promise.all([
                 axios.get('/api/admin/professors'),
                 axios.get('/api/admin/classes'),
-                axios.get('/api/admin/assignments')
+                axios.get('/api/admin/assignments'),
+                axios.get('/api/locations')
             ]);
             setProfessors(profsRes.data);
             setAllClasses(classesRes.data);
             setAssignments(assignRes.data);
+            setLocations(locsRes.data);
         } catch (err) {
             console.error("Error fetching initial data:", err);
+        }
+    };
+
+    const fetchStudents = async () => {
+        try {
+            const res = await axios.get('/api/admin/students');
+            setStudents(res.data);
+        } catch (err) {
+            console.error("Error fetching students:", err);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'students') {
+            fetchStudents();
+        }
+        if (activeTab === 'master') {
+            fetchMasterTimetable();
+        }
+        if (activeTab === 'locations') {
+            fetchLocations();
+        }
+    }, [activeTab]);
+
+    const fetchLocations = async () => {
+        try {
+            const res = await axios.get('/api/locations');
+            setLocations(res.data);
+        } catch (err) {
+            console.error("Error fetching locations:", err);
         }
     };
 
@@ -116,14 +157,33 @@ const AdminDashboard = () => {
         }
     };
 
-    const fetchClassAssignments = async (cid) => {
+    const fetchMasterTimetable = async () => {
         try {
-            const res = await axios.get(`/api/admin/assignments/${cid}`);
-            setClassAssignments(res.data);
+            const res = await axios.get('/api/timetable/master');
+            setMasterTimetable(res.data);
         } catch (err) {
             console.error(err);
         }
     };
+
+    const fetchClassAssignments = async (cid, forMaster = false) => {
+        try {
+            const res = await axios.get(`/api/admin/assignments/${cid}`);
+            if (forMaster) {
+                setClassAssignmentsForMaster(res.data);
+            } else {
+                setClassAssignments(res.data);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    useEffect(() => {
+        if (newEntry.class_id && activeTab === 'master') {
+            fetchClassAssignments(newEntry.class_id, true);
+        }
+    }, [newEntry.class_id, activeTab]);
 
     // --- Actions ---
     const handleCreateProf = async (e) => {
@@ -198,29 +258,55 @@ const AdminDashboard = () => {
             fetchInitialData();
             fetchClassAssignments(selectedClassId);
         } catch (err) {
-            alert('Failed to reset mappings');
+            console.error(err);
+        }
+    };
+
+    const handleCreateLocation = async (e) => {
+        e.preventDefault();
+        try {
+            await axios.post('/api/locations', newLocation);
+            setShowLocationModal(false);
+            setNewLocation({ name: '', type: 'LAB', capacity: '', parent_name: '' });
+            fetchLocations();
+        } catch (err) {
+            alert(err.response?.data?.error || 'Failed to create resource');
+        }
+    };
+
+    const handleDeleteLocation = async (id) => {
+        if (!window.confirm("Are you sure you want to delete this location?")) return;
+        try {
+            await axios.delete(`/api/locations/${id}`);
+            fetchLocations();
+        } catch (err) {
+            alert(err.response?.data?.error || "Error deleting location");
         }
     };
 
     const handleCreateEntry = async (e) => {
         e.preventDefault();
-        const assignment = classAssignments.find(a => a.id === parseInt(newEntry.assignment_id));
+        const targetClassId = activeTab === 'master' ? newEntry.class_id : selectedClassId;
+        const currentAssignments = activeTab === 'master' ? classAssignmentsForMaster : classAssignments;
+        
+        const assignment = currentAssignments.find(a => a.id === parseInt(newEntry.assignment_id));
         if (!assignment) return alert('Please select a subject mapping');
 
         try {
             await axios.post('/api/timetable', {
-                class_id: selectedClassId,
+                class_id: targetClassId,
                 professor_id: assignment.professor_id,
                 subject: assignment.subject_name,
-                location: newEntry.location,
+                location_id: newEntry.location_id,
                 day_of_week: activeSlot.day + 1,
                 start_slot: activeSlot.slot,
                 session_type: newEntry.session_type,
                 batch: newEntry.batch
             });
             setShowSlotModal(false);
-            setNewEntry({ assignment_id: '', location: '', session_type: 'LECTURE', batch: '' });
+            setNewEntry({ assignment_id: '', location_id: '', session_type: 'LECTURE', batch: '', class_id: '' });
             fetchTimetable();
+            fetchMasterTimetable();
         } catch (err) {
             alert(err.response?.data?.error || 'Failed to create entry');
         }
@@ -241,6 +327,7 @@ const AdminDashboard = () => {
             setShowDeleteModal(false);
             setEntryToDelete(null);
             fetchTimetable();
+            fetchMasterTimetable();
         } catch (err) {
             alert('Failed to delete entry');
         }
@@ -257,6 +344,18 @@ const AdminDashboard = () => {
         }
     };
 
+    const handlePromoteClass = async (e) => {
+        e.preventDefault();
+        try {
+            const res = await axios.post('/api/admin/promote-class', promotionForm);
+            alert(res.data.message);
+            setPromotionModal(false);
+            fetchStudents();
+        } catch (err) {
+            alert(err.response?.data?.error || 'Promotion failed');
+        }
+    };
+
     const getEntriesAt = (dayIndex, slotIndex) => {
         return timetable.filter(e => e.day_of_week === dayIndex + 1 && 
             (e.start_slot === slotIndex || (e.session_type === 'LAB' && e.start_slot === slotIndex - 1))
@@ -264,6 +363,19 @@ const AdminDashboard = () => {
             // Sort by batch name (B1, B2, B3...)
             if (a.batch && b.batch) return a.batch.localeCompare(b.batch);
             return 0;
+        });
+    };
+
+    const getMasterEntriesAt = (dayIndex, slotIndex) => {
+        let filtered = masterTimetable.filter(e => e.day_of_week === dayIndex + 1 && 
+            (e.start_slot === slotIndex || (e.session_type === 'LAB' && e.start_slot === slotIndex - 1))
+        );
+        if (masterFilterProf) {
+            filtered = filtered.filter(e => e.professor_id === parseInt(masterFilterProf));
+        }
+        return filtered.sort((a, b) => {
+            if (a.year !== b.year) return a.year.localeCompare(b.year);
+            return a.division.localeCompare(b.division);
         });
     };
 
@@ -309,9 +421,12 @@ const AdminDashboard = () => {
                     {showMenu && (
                         <div className="absolute top-full mt-2 left-0 w-64 rounded-[2rem] shadow-2xl border p-2 z-[100] animate-in slide-in-from-top-2 duration-200" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
                             {[
-                                { id: 'timetable', label: 'Timetable', icon: Calendar },
+                                { id: 'master', label: 'Master Timetable', icon: LayoutGrid },
+                                { id: 'timetable', label: 'Class Timetable', icon: Calendar },
                                 { id: 'professors', label: 'Professors', icon: Users },
                                 { id: 'mapping', label: 'Faculty Mapping', icon: ClipboardList },
+                                { id: 'locations', label: 'Classrooms & Labs', icon: MapPin },
+                                { id: 'students', label: 'Students & Promotion', icon: GraduationCap },
                             ].map(tab => (
                                 <button 
                                     key={tab.id}
@@ -394,6 +509,100 @@ const AdminDashboard = () => {
 
             <main className="max-w-7xl mx-auto p-4 md:p-8 animate-in fade-in duration-500">
                 
+                {/* --- TAB 0: MASTER TIMETABLE --- */}
+                {activeTab === 'master' && (
+                    <div className="space-y-8">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+                            <div className="space-y-1">
+                                <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Master Campus Schedule</h2>
+                                <p className="font-bold uppercase tracking-widest text-[10px] md:text-xs" style={{ color: 'var(--text-secondary)' }}>Unified view of all classes and faculty assignments</p>
+                            </div>
+                            <div className="flex gap-4 w-full md:w-auto">
+                                <div className="relative flex-1 md:w-64">
+                                    <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                    <select 
+                                        className="w-full pl-11 pr-4 py-3 rounded-xl border-2 outline-none focus:border-indigo-500 font-bold text-xs appearance-none"
+                                        style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+                                        value={masterFilterProf}
+                                        onChange={e => setMasterFilterProf(e.target.value)}
+                                    >
+                                        <option value="">All Faculty</option>
+                                        {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </select>
+                                </div>
+                                <button 
+                                    onClick={fetchMasterTimetable}
+                                    className="px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2"
+                                >
+                                    <RefreshCcw size={14} /> Refresh
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="rounded-[1.5rem] md:rounded-[2.5rem] shadow-2xl border overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
+                            <div className="overflow-x-auto">
+                                <table className="w-full border-collapse">
+                                    <thead>
+                                        <tr className="border-b-2" style={{ backgroundColor: 'var(--border-secondary)', borderColor: 'var(--border-primary)' }}>
+                                            <th className="p-6 text-left text-[10px] font-black uppercase tracking-widest border-r min-w-[140px]" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-primary)' }}>Slot Time</th>
+                                            {DAYS.map(day => (
+                                                <th key={day} className="p-6 text-center text-[10px] font-black uppercase tracking-widest min-w-[200px]" style={{ color: 'var(--text-primary)' }}>{day}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {SLOTS.map(slot => (
+                                            <tr key={slot.id} className="border-b last:border-0" style={{ borderColor: 'var(--border-primary)' }}>
+                                                <td className="p-6 border-r" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-main)' }}>
+                                                    <div className="text-[11px] font-black text-center" style={{ color: 'var(--text-primary)' }}>
+                                                        {slot.time}
+                                                    </div>
+                                                </td>
+                                                {DAYS.map((day, dayIdx) => {
+                                                    const entries = getMasterEntriesAt(dayIdx, slot.id);
+                                                    return (
+                                                        <td key={day} className="p-2 border-r min-h-[120px]" style={{ borderColor: 'var(--border-primary)' }}>
+                                                            <div className="flex flex-col gap-2">
+                                                                {entries.map(entry => (
+                                                                    <div key={entry.id} className="p-3 rounded-xl text-white shadow-sm space-y-1 relative group overflow-hidden" style={{ backgroundColor: entry.session_type === 'LAB' ? '#f59e0b' : '#4f46e5' }}>
+                                                                        <div className="flex justify-between items-start">
+                                                                            <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-white/20">{entry.year}-{entry.division}</span>
+                                                                            <div className="flex items-center gap-1">
+                                                                                {entry.batch && <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-white/10">{entry.batch}</span>}
+                                                                                <button 
+                                                                                    onClick={(e) => { e.stopPropagation(); setEntryToDelete(entry); setShowDeleteModal(true); }}
+                                                                                    className="p-1 rounded bg-white/10 hover:bg-red-500 transition-colors md:opacity-0 md:group-hover:opacity-100"
+                                                                                >
+                                                                                    <Trash2 size={10} />
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="font-black text-[10px] truncate">{entry.subject}</div>
+                                                                        <div className="text-[8px] font-bold opacity-80 flex items-center gap-1"><Users size={8} /> {entry.professor_name}</div>
+                                                                        <div className="text-[8px] font-bold opacity-80 flex items-center gap-1"><MapPin size={8} /> {entry.location_name || 'N/A'}</div>
+                                                                    </div>
+                                                                ))}
+                                                                
+                                                                <button 
+                                                                    onClick={() => { setActiveSlot({ day: dayIdx, slot: slot.id }); setShowSlotModal(true); }}
+                                                                    className="w-full py-2 border-2 border-dashed rounded-xl flex items-center justify-center transition-all hover:bg-black/5 group/btn"
+                                                                    style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
+                                                                >
+                                                                    <Plus size={14} className="opacity-40 group-hover/btn:opacity-100 group-hover/btn:scale-110 transition-all" />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* --- TAB 1: TIMETABLE --- */}
                 {activeTab === 'timetable' && (
                     <div className="space-y-8">
@@ -478,7 +687,7 @@ const AdminDashboard = () => {
                                                                             </div>
                                                                             <div className="text-[9px] font-bold flex items-center gap-1.5 mb-2 text-indigo-100">
                                                                                 <MapPin size={10} />
-                                                                                <span>{entry.location || 'N/A'}</span>
+                                                                                <span>{entry.location_name || 'N/A'}</span>
                                                                             </div>
                                                                             <div className="text-[9px] font-bold flex items-center gap-1.5 text-indigo-200">
                                                                                 <Users size={10} /> 
@@ -549,7 +758,7 @@ const AdminDashboard = () => {
                                                             <div className="space-y-1">
                                                                 <div className="font-black text-sm tracking-tight">{entry.subject}</div>
                                                                 <div className="text-[10px] font-bold flex items-center gap-1.5 text-indigo-100">
-                                                                    <MapPin size={12} /> {entry.location || 'N/A'}
+                                                                    <MapPin size={12} /> {entry.location_name || 'N/A'}
                                                                 </div>
                                                             </div>
                                                             <span className="text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest bg-white/20">
@@ -771,6 +980,175 @@ const AdminDashboard = () => {
                         </div>
                     </div>
                 )}
+                {/* --- TAB 4: STUDENTS & PROMOTION --- */}
+                {activeTab === 'students' && (
+                    <div className="space-y-8">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+                            <div className="space-y-1">
+                                <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Student Directory</h2>
+                                <p className="font-bold uppercase tracking-widest text-[10px] md:text-xs" style={{ color: 'var(--text-secondary)' }}>Manage student profiles and academic transitions</p>
+                            </div>
+                            <button 
+                                onClick={() => setPromotionModal(true)}
+                                className="w-full md:w-auto px-6 py-3.5 text-white rounded-xl md:rounded-2xl font-black text-xs md:text-sm shadow-xl hover:opacity-90 transition-all flex items-center justify-center gap-2"
+                                style={{ backgroundColor: 'var(--accent-primary)' }}
+                            >
+                                <RefreshCcw size={18} /> Promote Class
+                            </button>
+                        </div>
+
+                        <div className="rounded-[1.5rem] md:rounded-[2.5rem] shadow-xl border overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="border-b" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
+                                        <tr>
+                                            <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Student Name</th>
+                                            <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>PRN</th>
+                                            <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Class</th>
+                                            <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Batch</th>
+                                            <th className="px-8 py-5 text-center text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y" style={{ divideColor: 'var(--border-primary)' }}>
+                                        {students.map(s => (
+                                            <tr key={s.id} className="hover:bg-black/5 transition-colors">
+                                                <td className="px-8 py-6">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black" style={{ backgroundColor: 'var(--bg-main)', color: 'var(--accent-primary)', border: '1px solid var(--border-primary)' }}>{s.name[0]}</div>
+                                                        <div className="font-black" style={{ color: 'var(--text-primary)' }}>{s.name}</div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-6 font-bold" style={{ color: 'var(--text-secondary)' }}>{s.prn}</td>
+                                                <td className="px-8 py-6 font-bold" style={{ color: 'var(--text-primary)' }}>{s.year} - {s.division}</td>
+                                                <td className="px-8 py-6 font-bold" style={{ color: 'var(--text-secondary)' }}>{s.batch}</td>
+                                                <td className="px-8 py-6 text-center">
+                                                    <span className={`text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest ${s.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-600'}`}>
+                                                        {s.status}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {students.length === 0 && (
+                                <div className="px-8 py-20 text-center font-bold" style={{ color: 'var(--text-secondary)' }}>No students registered yet.</div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* --- TAB 5: LOCATIONS (Classrooms & Labs) --- */}
+                {activeTab === 'locations' && (
+                    <div className="space-y-8">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+                            <div className="space-y-1">
+                                <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Department Resources</h2>
+                                <p className="font-bold uppercase tracking-widest text-[10px] md:text-xs" style={{ color: 'var(--text-secondary)' }}>Manage all allocated classrooms and specialized labs</p>
+                            </div>
+                            <button 
+                                onClick={() => setShowLocationModal(true)}
+                                className="w-full md:w-auto px-6 py-3.5 text-white rounded-xl md:rounded-2xl font-black text-xs md:text-sm shadow-xl hover:opacity-90 transition-all flex items-center justify-center gap-2"
+                                style={{ backgroundColor: 'var(--accent-primary)' }}
+                            >
+                                <Plus size={18} /> Register New Room
+                            </button>
+                        </div>
+
+                        <div className="rounded-[1.5rem] md:rounded-[2.5rem] shadow-xl border overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="border-b" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
+                                        <tr>
+                                            <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Resource Name</th>
+                                            <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Type</th>
+                                            <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Capacity</th>
+                                            <th className="px-8 py-5 text-center text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y" style={{ divideColor: 'var(--border-primary)' }}>
+                                        {(() => {
+                                            const parents = locations.filter(l => !l.parent_id);
+                                            const orphans = locations.filter(l => l.parent_id && !parents.some(p => p.id === l.parent_id));
+                                            
+                                            return [...parents, ...orphans].map(parent => (
+                                                <React.Fragment key={parent.id}>
+                                                    {/* Parent Row */}
+                                                    <tr className="hover:bg-black/5 transition-colors group">
+                                                        <td className="px-8 py-6">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black" style={{ backgroundColor: 'var(--accent-primary)', color: '#fff' }}>
+                                                                    <Layers size={18} />
+                                                                </div>
+                                                                <div>
+                                                                    <div className="font-black text-sm uppercase tracking-tight" style={{ color: 'var(--text-primary)' }}>{parent.name}</div>
+                                                                    <div className="text-[9px] font-black opacity-50 uppercase tracking-widest text-indigo-500">Main Lab / Root</div>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-8 py-6">
+                                                            <span className={`text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest bg-indigo-600 text-white shadow-lg shadow-indigo-500/20`}>
+                                                                {parent.type}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-8 py-6 font-bold" style={{ color: 'var(--text-secondary)' }}>{parent.capacity || 'N/A'} Students</td>
+                                                        <td className="px-8 py-6 text-center">
+                                                            <button 
+                                                                onClick={() => handleDeleteLocation(parent.id)}
+                                                                className="p-3 rounded-xl transition-all hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                                style={{ color: 'var(--text-secondary)' }}
+                                                            >
+                                                                <Trash2 size={20} />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                    
+                                                    {/* Children Rows */}
+                                                    {locations
+                                                        .filter(child => child.parent_id === parent.id)
+                                                        .map(child => (
+                                                            <tr key={child.id} className="bg-black/[0.02] dark:bg-white/[0.01] hover:bg-black/5 transition-colors border-l-4 border-indigo-500/30">
+                                                                <td className="px-8 py-5 pl-16">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black" style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent-primary)' }}>
+                                                                            {child.type === 'LAB' ? <Settings size={14} /> : <BookOpen size={14} />}
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{child.name}</div>
+                                                                            <div className="text-[8px] font-black opacity-40 uppercase">Sub-resource</div>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-8 py-5">
+                                                                    <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest ${child.type === 'LAB' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-600'}`}>
+                                                                        {child.type}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-8 py-5 text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>{child.capacity || 'N/A'} Students</td>
+                                                                <td className="px-8 py-5 text-center">
+                                                                    <button 
+                                                                        onClick={() => handleDeleteLocation(child.id)}
+                                                                        className="p-2 rounded-lg transition-all hover:text-red-500 hover:bg-red-50"
+                                                                        style={{ color: 'var(--text-secondary)' }}
+                                                                    >
+                                                                        <Trash2 size={16} />
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        ))
+                                                    }
+                                                </React.Fragment>
+                                            ));
+                                        })()}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {locations.length === 0 && (
+                                <div className="px-8 py-20 text-center font-bold" style={{ color: 'var(--text-secondary)' }}>No resources registered yet.</div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </main>
 
             {/* --- MODALS --- */}
@@ -868,6 +1246,107 @@ const AdminDashboard = () => {
                 </div>
             )}
 
+            {/* Location Registration Modal */}
+            {showLocationModal && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+                    <div className="w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300" style={{ backgroundColor: 'var(--bg-card)' }}>
+                        <div className="px-6 md:px-10 py-6 md:py-8 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
+                            <h3 className="font-black text-xl md:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Register Resource</h3>
+                            <button onClick={() => setShowLocationModal(false)} className="p-2 rounded-2xl hover:opacity-70 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={20} className="md:w-6 md:h-6" /></button>
+                        </div>
+                        <form onSubmit={handleCreateLocation} className="p-6 md:p-10 space-y-4 md:space-y-6">
+                            <div className="flex gap-4 p-4 rounded-2xl border-2 mb-4" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
+                                <label className="flex items-center gap-3 cursor-pointer flex-1 group">
+                                    <input 
+                                        type="checkbox" 
+                                        className="w-5 h-5 rounded-lg border-2 accent-indigo-600 cursor-pointer"
+                                        checked={!newLocation.parent_name || newLocation.parent_name === newLocation.name}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setNewLocation({...newLocation, parent_name: newLocation.name});
+                                            } else {
+                                                setNewLocation({...newLocation, parent_name: ''});
+                                            }
+                                        }}
+                                    />
+                                    <span className="text-[11px] font-black uppercase tracking-widest text-indigo-500 group-hover:text-indigo-600 transition-colors">Register as Main Lab</span>
+                                </label>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Resource Name</label>
+                                <input 
+                                    required 
+                                    className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" 
+                                    style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
+                                    placeholder="e.g. Room 302 or Computer Lab 1" 
+                                    value={newLocation.name} 
+                                    onChange={e => {
+                                        const isMain = !newLocation.parent_name || newLocation.parent_name === newLocation.name;
+                                        setNewLocation({
+                                            ...newLocation, 
+                                            name: e.target.value,
+                                            parent_name: isMain ? e.target.value : newLocation.parent_name
+                                        });
+                                    }} 
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Resource Type</label>
+                                <div className="flex gap-2">
+                                    {['CLASSROOM', 'LAB'].map(type => (
+                                        <button 
+                                            key={type} 
+                                            type="button"
+                                            onClick={() => setNewLocation({...newLocation, type})}
+                                            className={`flex-1 py-3 md:py-3.5 rounded-lg md:rounded-xl border-4 font-black transition-all text-[10px] ${
+                                                newLocation.type === type 
+                                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-500/20' 
+                                                : 'border-transparent'
+                                            }`}
+                                            style={{ 
+                                                backgroundColor: newLocation.type === type ? '#4f46e5' : 'var(--bg-main)',
+                                                color: newLocation.type === type ? '#fff' : 'var(--text-secondary)'
+                                            }}
+                                        >
+                                            {type}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Capacity (Student Count)</label>
+                                <input type="number" className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="60" value={newLocation.capacity} onChange={e => setNewLocation({...newLocation, capacity: e.target.value})} />
+                            </div>
+                            {(!newLocation.parent_name || newLocation.parent_name !== newLocation.name) && (
+                                <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Parent Lab (Mandatory)</label>
+                                    <div className="relative">
+                                        <input 
+                                            required 
+                                            list="parent-labs"
+                                            className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" 
+                                            style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
+                                            placeholder="Select or type Parent Lab"
+                                            value={newLocation.parent_name} 
+                                            onChange={e => setNewLocation({...newLocation, parent_name: e.target.value})}
+                                        />
+                                        <datalist id="parent-labs">
+                                            {locations
+                                                .filter(l => l.type === 'LAB' && !l.parent_id)
+                                                .map(l => (
+                                                    <option key={l.id} value={l.name} />
+                                                ))}
+                                        </datalist>
+                                    </div>
+                                </div>
+                            )}
+                            <button className="w-full text-white py-4 md:py-5 rounded-xl md:rounded-2xl font-black text-base md:text-lg hover:opacity-90 transition-all shadow-2xl mt-2 md:mt-4" style={{ backgroundColor: 'var(--accent-primary)' }}>Confirm Registration</button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {/* Timetable Assignment Modal */}
             {showSlotModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
@@ -883,11 +1362,28 @@ const AdminDashboard = () => {
                             <button onClick={() => setShowSlotModal(false)} className="p-2 rounded-2xl hover:opacity-70 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={20} className="md:w-6 md:h-6" /></button>
                         </div>
                         <form onSubmit={handleCreateEntry} className="p-6 md:p-10 space-y-4 md:space-y-6">
+                            {activeTab === 'master' && (
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Target Class</label>
+                                    <select required className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={newEntry.class_id} onChange={e => setNewEntry({...newEntry, class_id: e.target.value, assignment_id: ''})}>
+                                        <option value="">Select Class</option>
+                                        {allClasses.map(c => <option key={c.id} value={c.id}>{c.year} - {c.division}</option>)}
+                                    </select>
+                                </div>
+                            )}
+
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Select Subject Mapping</label>
-                                <select required className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={newEntry.assignment_id} onChange={e => setNewEntry({...newEntry, assignment_id: e.target.value})}>
-                                    <option value="">Mapped Professors</option>
-                                    {classAssignments
+                                <select 
+                                    required 
+                                    disabled={activeTab === 'master' && !newEntry.class_id}
+                                    className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer text-sm md:text-base disabled:opacity-50" 
+                                    style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
+                                    value={newEntry.assignment_id} 
+                                    onChange={e => setNewEntry({...newEntry, assignment_id: e.target.value})}
+                                >
+                                    <option value="">{activeTab === 'master' && !newEntry.class_id ? 'Pick a class first' : 'Mapped Professors'}</option>
+                                    {(activeTab === 'master' ? classAssignmentsForMaster : classAssignments)
                                         .filter(a => {
                                             if (newEntry.session_type === 'LECTURE') return a.session_type === 'LECTURE' || a.session_type === 'BOTH';
                                             if (newEntry.session_type === 'LAB') return a.session_type === 'LAB' || a.session_type === 'BOTH';
@@ -928,17 +1424,72 @@ const AdminDashboard = () => {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Room / Location</label>
-                                <input required placeholder="e.g. Room 302" className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={newEntry.location} onChange={e => setNewEntry({...newEntry, location: e.target.value})} />
+                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Allot Physical Resource</label>
+                                <select 
+                                    required 
+                                    className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer text-sm md:text-base" 
+                                    style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
+                                    value={newEntry.location_id} 
+                                    onChange={e => setNewEntry({...newEntry, location_id: e.target.value})}
+                                >
+                                    <option value="">Select Room/Lab</option>
+                                    {locations
+                                        .sort((a, b) => {
+                                            if (newEntry.session_type === 'LAB') {
+                                                if (a.type === 'LAB' && b.type !== 'LAB') return -1;
+                                                if (a.type !== 'LAB' && b.type === 'LAB') return 1;
+                                            }
+                                            return a.name.localeCompare(b.name);
+                                        })
+                                        .map(l => (
+                                        <option key={l.id} value={l.id}>{l.name} ({l.type})</option>
+                                    ))}
+                                </select>
                             </div>
 
                             <button 
-                                disabled={classAssignments.length === 0 || (newEntry.session_type === 'LAB' && activeSlot.slot === 6)}
+                                disabled={(activeTab === 'master' ? classAssignmentsForMaster.length === 0 : classAssignments.length === 0) || (newEntry.session_type === 'LAB' && activeSlot.slot === 6)}
                                 className="w-full text-white py-4 md:py-5 rounded-xl md:rounded-2xl font-black text-base md:text-lg hover:opacity-90 transition-all shadow-2xl disabled:opacity-50 mt-2 md:mt-2"
                                 style={{ backgroundColor: 'var(--accent-primary)' }}
                             >
                                 Confirm Allotment
                             </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Promotion Modal */}
+            {promotionModal && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+                    <div className="w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300" style={{ backgroundColor: 'var(--bg-card)' }}>
+                        <div className="px-6 md:px-10 py-6 md:py-8 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
+                            <h3 className="font-black text-xl md:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Promote Entire Class</h3>
+                            <button onClick={() => setPromotionModal(false)} className="p-2 rounded-2xl hover:opacity-70 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={20} /></button>
+                        </div>
+                        <form onSubmit={handlePromoteClass} className="p-6 md:p-10 space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Source Class (Current)</label>
+                                <select required className="w-full px-5 py-4 border-2 rounded-2xl outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={promotionForm.source_class_id} onChange={e => setPromotionForm({...promotionForm, source_class_id: e.target.value})}>
+                                    <option value="">Select Source Class</option>
+                                    {allClasses.map(c => <option key={c.id} value={c.id}>{c.year} - {c.division}</option>)}
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Target Class (Destination)</label>
+                                <select required className="w-full px-5 py-4 border-2 rounded-2xl outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={promotionForm.target_class_id} onChange={e => setPromotionForm({...promotionForm, target_class_id: e.target.value})}>
+                                    <option value="">Select Destination</option>
+                                    {allClasses.map(c => <option key={c.id} value={c.id}>{c.year} - {c.division}</option>)}
+                                    <option value="GRADUATED">🎓 MARK AS GRADUATED</option>
+                                </select>
+                            </div>
+                            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-200 dark:border-amber-800">
+                                <div className="flex gap-3">
+                                    <AlertCircle className="text-amber-600 shrink-0" size={20} />
+                                    <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">Warning: This will move ALL active students from the source class to the target class. This action cannot be easily undone.</p>
+                                </div>
+                            </div>
+                            <button className="w-full text-white py-5 rounded-2xl font-black text-lg hover:opacity-90 transition-all shadow-2xl" style={{ backgroundColor: 'var(--accent-primary)' }}>Promote Students</button>
                         </form>
                     </div>
                 </div>

@@ -136,7 +136,43 @@ router.delete('/assignments/reset/:class_id', requireAdmin, async (req, res) => 
     }
 });
 
-// Student Promotion Logic
+// Student Management & Promotion
+router.get('/students', requireAdmin, async (req, res) => {
+    try {
+        const query = `
+            SELECT s.*, c.year, c.division 
+            FROM students s 
+            JOIN classes c ON s.class_id = c.id 
+            ORDER BY c.year ASC, c.division ASC, s.name ASC
+        `;
+        const result = await db.query(query);
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ error: "Server error" });
+    }
+});
+
+router.post('/promote-class', requireAdmin, async (req, res) => {
+    try {
+        const { source_class_id, target_class_id } = req.body;
+        
+        // If target_class_id is 'GRADUATED', mark them as such
+        if (target_class_id === 'GRADUATED') {
+            await db.query('UPDATE students SET status = \'GRADUATED\' WHERE class_id = $1', [source_class_id]);
+            return res.json({ message: "Class marked as graduated successfully" });
+        }
+
+        const updateQuery = 'UPDATE students SET class_id = $1 WHERE class_id = $2 AND status = \'ACTIVE\'';
+        const result = await db.query(updateQuery, [target_class_id, source_class_id]);
+        
+        res.json({ message: `${result.rowCount} students promoted successfully` });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Server error during class promotion" });
+    }
+});
+
+// Batch Promotion Logic (Global)
 router.post('/promote-students', requireAdmin, async (req, res) => {
     try {
         const promotionMap = {

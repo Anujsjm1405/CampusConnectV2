@@ -52,6 +52,7 @@ app.use('/api/admin', require('./routes/admin'));
 app.use('/api/timetable', require('./routes/timetable'));
 app.use('/api/professors', require('./routes/professors'));
 app.use('/api/students', require('./routes/students'));
+app.use('/api/locations', require('./routes/locations'));
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {

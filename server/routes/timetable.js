@@ -5,7 +5,7 @@ const { requireAdmin } = require('../middleware/auth');
 
 router.post('/', requireAdmin, async (req, res) => {
     try {
-        const { class_id, professor_id, subject, location, day_of_week, start_slot, session_type, batch } = req.body;
+        const { class_id, professor_id, subject, location_id, day_of_week, start_slot, session_type, batch } = req.body;
         
         let duration_slots = session_type === 'LAB' ? 2 : 1;
         
@@ -61,15 +61,54 @@ router.post('/', requireAdmin, async (req, res) => {
             }
         }
 
+        // 3. Check room overlap (Including parent and child locations)
+        const roomOverlapQuery = `
+            SELECT t.*, l.name as occupied_room_name
+            FROM timetable t
+            JOIN locations l ON t.location_id = l.id
+            WHERE day_of_week = $2
+              AND (start_slot < $3::int + $4::int) AND ($3::int < start_slot + duration_slots)
+              AND (
+                t.location_id = $1 -- Same room
+                OR t.location_id IN (SELECT id FROM locations WHERE parent_id = $1) -- Child room
+                OR t.location_id = (SELECT parent_id FROM locations WHERE id = $1) -- Parent room
+              )
+        `;
+        const roomOverlap = await db.query(roomOverlapQuery, [location_id, day_of_week, start_slot, duration_slots]);
+        if (roomOverlap.rows.length > 0) {
+            const conflictRoom = roomOverlap.rows[0].occupied_room_name;
+            return res.status(409).json({ error: `Conflict: ${conflictRoom} is already occupied at this time (overlaps with hierarchy).` });
+        }
+
         const insertQuery = `
-            INSERT INTO timetable (class_id, professor_id, subject, location, day_of_week, start_slot, duration_slots, session_type, batch)
+            INSERT INTO timetable (class_id, professor_id, subject, location_id, day_of_week, start_slot, duration_slots, session_type, batch)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
         `;
-        const newTimetable = await db.query(insertQuery, [class_id, professor_id, subject, location, day_of_week, start_slot, duration_slots, session_type, batch || null]);
+        const newTimetable = await db.query(insertQuery, [class_id, professor_id, subject, location_id, day_of_week, start_slot, duration_slots, session_type, batch || null]);
         
         res.status(201).json(newTimetable.rows[0]);
     } catch (error) {
         console.error(error);
+        res.status(500).json({ error: "Server error" });
+    }
+});
+
+router.get('/master', requireAdmin, async (req, res) => {
+    console.log('Fetching master timetable...');
+    try {
+        const query = `
+            SELECT t.*, u.name as professor_name, c.year, c.division, l.name as location_name
+            FROM timetable t
+            JOIN users u ON t.professor_id = u.id
+            JOIN classes c ON t.class_id = c.id
+            LEFT JOIN locations l ON t.location_id = l.id
+            ORDER BY t.day_of_week ASC, t.start_slot ASC
+        `;
+        const result = await db.query(query);
+        console.log(`Found ${result.rows.length} master entries`);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching master timetable:', error);
         res.status(500).json({ error: "Server error" });
     }
 });
@@ -80,9 +119,10 @@ router.get('/', requireAdmin, async (req, res) => {
         if (!class_id) return res.status(400).json({ error: "class_id is required" });
         
         const query = `
-            SELECT t.*, u.name as professor_name 
+            SELECT t.*, u.name as professor_name, l.name as location_name
             FROM timetable t
             JOIN users u ON t.professor_id = u.id
+            LEFT JOIN locations l ON t.location_id = l.id
             WHERE t.class_id = $1
             ORDER BY t.day_of_week ASC, t.start_slot ASC
         `;
