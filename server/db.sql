@@ -49,11 +49,12 @@ CREATE TABLE timetable (
 CREATE TABLE professor_status (
     id SERIAL PRIMARY KEY,
     professor_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status_date DATE NOT NULL DEFAULT CURRENT_DATE,
     day_of_week INT NOT NULL CHECK (day_of_week BETWEEN 1 AND 5),
     slot_id INT NOT NULL CHECK (slot_id BETWEEN 0 AND 6),
     status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(professor_id, day_of_week, slot_id)
+    UNIQUE(professor_id, status_date, slot_id)
 );
 
 CREATE TABLE students (

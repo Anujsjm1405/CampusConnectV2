@@ -67,8 +67,8 @@ const Register = () => {
             <div className="absolute top-6 right-6 flex gap-2">
                 <button 
                     onClick={toggleTheme}
-                    className="p-3 rounded-2xl transition-all active:scale-95 border shadow-sm"
-                    style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
+                    className="p-3 rounded-2xl active:scale-95 glass-panel"
+                    style={{ color: 'var(--text-secondary)' }}
                 >
                     {theme === 'light' ? <Moon size={24} /> : <Sun size={24} />}
                 </button>

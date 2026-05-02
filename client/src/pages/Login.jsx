@@ -61,14 +61,14 @@ const Login = () => {
             <div className="absolute top-6 right-6">
                 <button 
                     onClick={toggleTheme}
-                    className="p-3 rounded-2xl transition-all active:scale-95 border shadow-sm"
-                    style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
+                    className="p-3 rounded-2xl active:scale-95 glass-panel"
+                    style={{ color: 'var(--text-secondary)' }}
                 >
                     {theme === 'light' ? <Moon size={24} /> : <Sun size={24} />}
                 </button>
             </div>
 
-            <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden border transition-all duration-300 shadow-2xl" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
+            <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden glass-panel">
                 <div className="px-10 pt-10 pb-6 text-center space-y-4">
                     <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white mx-auto shadow-lg shadow-indigo-500/20">
                         {loginType === 'FACULTY' ? <Lock size={32} /> : <GraduationCap size={32} />}
@@ -85,21 +85,15 @@ const Login = () => {
                     <div className="flex p-1 rounded-2xl border" style={{ backgroundColor: 'var(--border-secondary)', borderColor: 'var(--border-primary)' }}>
                         <button 
                             onClick={() => setLoginType('FACULTY')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-black text-[10px] transition-all ${loginType === 'FACULTY' ? 'shadow-md scale-[1.02]' : 'opacity-50 hover:opacity-80'}`}
-                            style={{ 
-                                backgroundColor: loginType === 'FACULTY' ? 'var(--bg-card)' : 'transparent',
-                                color: 'var(--text-primary)' 
-                            }}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-black text-[10px] ${loginType === 'FACULTY' ? 'shadow-md scale-[1.02]' : 'opacity-50 hover:opacity-80'} ${loginType === 'FACULTY'  ? 'glass-panel' : ''}`}
+                            style={{ color: 'var(--text-primary)' }}
                         >
                             <User size={12} /> FACULTY
                         </button>
                         <button 
                             onClick={() => setLoginType('STUDENT')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-black text-[10px] transition-all ${loginType === 'STUDENT' ? 'shadow-md scale-[1.02]' : 'opacity-50 hover:opacity-80'}`}
-                            style={{ 
-                                backgroundColor: loginType === 'STUDENT' ? 'var(--bg-card)' : 'transparent',
-                                color: 'var(--text-primary)' 
-                            }}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-black text-[10px] ${loginType === 'STUDENT' ? 'shadow-md scale-[1.02]' : 'opacity-50 hover:opacity-80'} ${loginType === 'STUDENT'  ? 'glass-panel' : ''}`}
+                            style={{ color: 'var(--text-primary)' }}
                         >
                             <GraduationCap size={14} /> STUDENT
                         </button>

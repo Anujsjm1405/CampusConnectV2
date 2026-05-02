@@ -105,12 +105,12 @@ const StudentDashboard = () => {
     };
 
     const getStatusInfo = (status) => {
-        if (!isCollegeHours()) return { icon: <Coffee size={14} />, color: '#94a3b8', label: 'Off-Campus', vibrant: 'bg-slate-500' };
+        if (!isCollegeHours()) return { icon: <Coffee size={14} />, color: 'var(--text-secondary)', label: 'Off-Campus', vibrant: 'bg-slate-500/10', text: 'text-slate-500' };
         switch (status?.toUpperCase()) {
-            case 'ACTIVE': return { icon: <CheckCircle2 size={14} />, color: '#10b981', label: 'Available', vibrant: 'bg-emerald-500' };
-            case 'BUSY': return { icon: <AlertCircle size={14} />, color: '#f59e0b', label: 'Busy', vibrant: 'bg-amber-500' };
-            case 'LEAVE': return { icon: <XCircle size={14} />, color: '#ef4444', label: 'On Leave', vibrant: 'bg-red-500' };
-            default: return { icon: <RefreshCw size={14} />, color: '#10b981', label: 'Available', vibrant: 'bg-emerald-500' };
+            case 'ACTIVE': return { icon: <CheckCircle2 size={14} />, color: '#10b981', label: 'Available', vibrant: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400' };
+            case 'BUSY': return { icon: <AlertCircle size={14} />, color: '#f59e0b', label: 'Busy', vibrant: 'bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400' };
+            case 'LEAVE': return { icon: <XCircle size={14} />, color: '#ef4444', label: 'On Leave', vibrant: 'bg-rose-500/10', text: 'text-rose-600 dark:text-rose-400' };
+            default: return { icon: <RefreshCw size={14} />, color: '#10b981', label: 'Available', vibrant: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400' };
         }
     };
 
@@ -144,13 +144,7 @@ const StudentDashboard = () => {
         </div>
     );
 
-    const glassStyle = {
-        background: theme === 'light' ? 'rgba(255, 255, 255, 0.4)' : 'rgba(15, 23, 42, 0.4)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-        boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.07)'
-    };
+    // Using .glass-panel from index.css for styling
 
     const ProfCard = ({ prof, isSemester }) => {
         const status = getStatusInfo(prof.status);
@@ -159,15 +153,14 @@ const StudentDashboard = () => {
             : [];
 
         return (
-            <div className="group p-4 md:p-6 rounded-[2rem] transition-all hover:scale-[1.02] relative overflow-hidden h-full flex flex-col justify-between" style={glassStyle}>
+            <div className="group p-4 md:p-6 rounded-[2rem] relative overflow-hidden h-full flex flex-col justify-between glass-panel">
                 <div className={`absolute top-0 right-0 w-20 h-20 ${status.vibrant} opacity-10 blur-2xl -mr-10 -mt-10 group-hover:opacity-20 transition-opacity`}></div>
                 <div>
                     <div className="flex items-start justify-between mb-4 relative">
                         <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-500 shadow-inner">
                             <User size={24} />
                         </div>
-                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shadow-lg" 
-                             style={{ backgroundColor: status.color, color: 'white' }}>
+                        <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border ${status.vibrant} ${status.text} shadow-sm`}>
                             {status.icon} {status.label}
                         </div>
                     </div>
@@ -213,10 +206,10 @@ const StudentDashboard = () => {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <button onClick={toggleTheme} className="p-2 rounded-xl border transition-all active:scale-90" style={{ ...glassStyle }}>
+                        <button onClick={toggleTheme} className="p-2 rounded-xl active:scale-90 glass-panel">
                             {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
                         </button>
-                        <button onClick={logout} className="p-2 rounded-xl border transition-all hover:text-red-500" style={{ ...glassStyle }}>
+                        <button onClick={logout} className="p-2 rounded-xl hover:text-red-500 glass-panel">
                             <LogOut size={16} />
                         </button>
                     </div>
@@ -224,7 +217,7 @@ const StudentDashboard = () => {
             </header>
 
             <main className="relative z-10 max-w-7xl mx-auto px-4 md:px-8 pt-4 md:pt-6 space-y-6">
-                <section className="p-6 md:p-8 rounded-[2.5rem] relative overflow-hidden group shadow-xl" style={glassStyle}>
+                <section className="p-6 md:p-8 rounded-[2.5rem] relative overflow-hidden group glass-panel">
                     <div className="absolute top-0 right-0 w-60 h-60 bg-indigo-500/10 rounded-full blur-[60px] -mr-30 -mt-30 group-hover:bg-indigo-500/20 transition-all duration-700"></div>
                     <div className="relative flex items-center justify-between gap-6">
                         <div className="space-y-1">
@@ -247,7 +240,7 @@ const StudentDashboard = () => {
                     </div>
                 </section>
 
-                <div className="flex gap-2 p-1.5 rounded-2xl border sticky top-20 z-50 shadow-lg" style={{ ...glassStyle }}>
+                <div className="flex gap-2 p-1.5 rounded-2xl sticky top-20 z-50 glass-panel">
                     <button 
                         onClick={() => setActiveTab('FACULTY')}
                         className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] transition-all ${activeTab === 'FACULTY' ? 'bg-indigo-600 text-white shadow-lg' : 'opacity-40 hover:opacity-100'}`}
@@ -268,8 +261,7 @@ const StudentDashboard = () => {
                             <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-indigo-500" size={16} />
                             <input 
                                 placeholder="Search faculty..."
-                                className="w-full pl-12 pr-6 py-3.5 text-sm rounded-2xl border-2 outline-none focus:border-indigo-500 transition-all shadow-inner"
-                                style={{ ...glassStyle, background: 'rgba(255,255,255,0.08)' }}
+                                className="w-full pl-12 pr-6 py-3.5 text-sm rounded-2xl outline-none focus:border-indigo-500 glass-panel"
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                             />
@@ -309,48 +301,62 @@ const StudentDashboard = () => {
                         </div>
 
                         {scheduleSubTab === 'TODAY' ? (
-                            <div className="grid grid-cols-1 gap-3">
-                                {todayFullSchedule.map((lecture, idx) => {
-                                    const isNow = currentSlotIdx === lecture.start_slot && inCollege;
-                                    const isLab = lecture.session_type === 'LAB';
-                                    const isFree = lecture.isFree;
-                                    const cardColor = isFree ? 'border-emerald-500/30' : (isLab ? 'border-amber-500/30' : 'border-red-500/30');
-                                    const accentBg = isFree ? 'bg-emerald-500/10 text-emerald-500' : (isLab ? 'bg-amber-500/10 text-amber-500' : 'bg-red-500/10 text-red-500');
-                                    const accentSolid = isFree ? 'bg-emerald-500' : (isLab ? 'bg-amber-500' : 'bg-red-500');
+                            (currentTime.getDay() === 0 || currentTime.getDay() === 6) ? (
+                                <div className="py-20 flex flex-col items-center justify-center text-center space-y-8 animate-in zoom-in-95 duration-700">
+                                    <div className="w-24 h-24 rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-500/20 bg-indigo-500/10 text-indigo-500">
+                                        <Calendar size={48} className="opacity-80" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <h2 className="text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Today is Rest Day</h2>
+                                        <p className="font-bold uppercase tracking-[0.2em] text-[10px]" style={{ color: 'var(--text-secondary)' }}>Recharge for the upcoming week</p>
+                                    </div>
+                                    
 
-                                    return (
-                                        <div key={idx} className={`group relative p-4 md:p-6 rounded-3xl border-2 transition-all ${cardColor} ${isNow ? 'ring-4 ring-indigo-500/10 scale-[1.01]' : ''}`} style={glassStyle}>
-                                            <div className="flex items-center justify-between gap-4">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center ${accentBg}`}>
-                                                        {isFree ? <Check size={20} /> : <Clock size={20} />}
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-40">{SLOTS[lecture.start_slot || idx].time}</p>
-                                                        <h3 className={`font-black text-base md:text-xl tracking-tight ${isNow ? 'text-indigo-500' : ''}`}>
-                                                            {isFree ? 'FREE SLOT' : lecture.subject}
-                                                        </h3>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    {isFree ? (
-                                                        <span className="text-[9px] font-black px-2 py-1 rounded-lg bg-emerald-500 text-white uppercase tracking-widest">Available</span>
-                                                    ) : (
-                                                        <div className="flex flex-col items-end gap-1">
-                                                            <span className={`text-[9px] font-black px-2 py-1 rounded-lg text-white uppercase tracking-widest ${accentSolid}`}>{lecture.session_type}</span>
-                                                            <p className="text-[10px] font-bold opacity-40 flex items-center gap-1 justify-end"><User size={12} /> {lecture.professor_name?.split(' ')[0]}</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-3">
+                                    {todayFullSchedule.map((lecture, idx) => {
+                                        const isNow = currentSlotIdx === lecture.start_slot && inCollege;
+                                        const isLab = lecture.session_type === 'LAB';
+                                        const isFree = lecture.isFree;
+                                        const cardColor = isFree ? 'border-emerald-500/30' : (isLab ? 'border-amber-500/30' : 'border-rose-500/30');
+                                        const accentBg = isFree ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' : (isLab ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20');
+                                        const accentSolid = isFree ? 'bg-emerald-500/20' : (isLab ? 'bg-amber-500/20' : 'bg-rose-500/20');
+
+                                        return (
+                                            <div key={idx} className={`group relative p-4 md:p-6 rounded-3xl border-2 ${cardColor} ${isNow ? 'ring-4 ring-indigo-500/10 scale-[1.01]' : ''} glass-panel`}>
+                                                <div className="flex items-center justify-between gap-4">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl border flex items-center justify-center ${accentBg}`}>
+                                                            {isFree ? <Check size={20} /> : <Clock size={20} />}
                                                         </div>
-                                                    )}
+                                                        <div>
+                                                            <p className="text-[10px] font-black uppercase tracking-widest opacity-40">{SLOTS[lecture.start_slot || idx].time}</p>
+                                                            <h3 className={`font-black text-base md:text-xl tracking-tight ${isNow ? 'text-indigo-500' : ''}`}>
+                                                                {isFree ? 'FREE SLOT' : lecture.subject}
+                                                            </h3>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        {isFree ? (
+                                                            <span className="text-[9px] font-black px-2 py-1 rounded-lg bg-emerald-500 text-white uppercase tracking-widest">Available</span>
+                                                        ) : (
+                                                            <div className="flex flex-col items-end gap-1">
+                                                                <span className={`text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-widest border ${accentBg}`}>{lecture.session_type}</span>
+                                                                <p className="text-[10px] font-bold opacity-40 flex items-center gap-1 justify-end"><User size={12} /> {lecture.professor_name}</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
+                                                {isNow && <div className="absolute -top-2 right-6 bg-indigo-600 text-white text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">Ongoing</div>}
                                             </div>
-                                            {isNow && <div className="absolute -top-2 right-6 bg-indigo-600 text-white text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">Ongoing</div>}
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )
                         ) : (
                             <div className="overflow-x-auto pb-4 custom-scrollbar">
-                                <div className="min-w-[800px] p-4 rounded-3xl" style={glassStyle}>
+                                <div className="min-w-[800px] p-4 rounded-3xl glass-panel">
                                     <table className="w-full border-separate border-spacing-2">
                                         <thead>
                                             <tr>
@@ -374,7 +380,7 @@ const StudentDashboard = () => {
                                                                 {lecture ? (
                                                                     <div className="space-y-1">
                                                                         <p className="font-black text-[10px] leading-tight tracking-tighter">{lecture.subject}</p>
-                                                                        <p className="text-[8px] font-bold opacity-60 truncate">{lecture.professor_name?.split(' ')[0]}</p>
+                                                                        <p className="text-[8px] font-bold opacity-60 truncate">{lecture.professor_name}</p>
                                                                     </div>
                                                                 ) : <Check size={14} className="mx-auto opacity-30" />}
                                                             </td>

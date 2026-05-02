@@ -174,31 +174,63 @@ router.post('/promote-class', requireAdmin, async (req, res) => {
 
 // Batch Promotion Logic (Global)
 router.post('/promote-students', requireAdmin, async (req, res) => {
+    const client = await db.getClient();
     try {
+        await client.query('BEGIN');
+
         const promotionMap = {
             'SY': 'TY',
-            'TY': 'B.Tech',
-            'B.Tech': 'GRADUATED'
+            'TY': 'B.Tech'
         };
+        const graduateYears = ['B.Tech', 'FY M.Tech'];
 
-        const studentsResult = await db.query('SELECT s.*, c.year, c.division FROM students s JOIN classes c ON s.class_id = c.id WHERE s.status = \'ACTIVE\'');
+        // 1. Get all active students with their current class info
+        const studentsResult = await client.query(`
+            SELECT s.id, s.name, c.year, c.division 
+            FROM students s 
+            JOIN classes c ON s.class_id = c.id 
+            WHERE s.status = 'ACTIVE'
+        `);
         
+        let promotedCount = 0;
+        let graduatedCount = 0;
+
         for (const student of studentsResult.rows) {
-            const nextYear = promotionMap[student.year];
-            if (nextYear === 'GRADUATED') {
-                await db.query('UPDATE students SET status = \'GRADUATED\' WHERE id = $1', [student.id]);
-            } else if (nextYear) {
-                const classQuery = await db.query('SELECT id FROM classes WHERE year = $1 AND division = $2', [nextYear, student.division]);
-                if (classQuery.rows.length > 0) {
-                    await db.query('UPDATE students SET class_id = $1 WHERE id = $2', [classQuery.rows[0].id, student.id]);
+            if (graduateYears.includes(student.year)) {
+                // Delete graduated students as per requirement
+                await client.query('DELETE FROM students WHERE id = $1', [student.id]);
+                graduatedCount++;
+            } else {
+                const nextYear = promotionMap[student.year];
+                if (nextYear) {
+                    // Find the class for the next year with the same division
+                    const classQuery = await client.query(
+                        'SELECT id FROM classes WHERE year = $1 AND division = $2', 
+                        [nextYear, student.division]
+                    );
+                    
+                    if (classQuery.rows.length > 0) {
+                        await client.query(
+                            'UPDATE students SET class_id = $1 WHERE id = $2', 
+                            [classQuery.rows[0].id, student.id]
+                        );
+                        promotedCount++;
+                    }
                 }
             }
         }
         
-        res.json({ message: "Students promoted successfully" });
+        await client.query('COMMIT');
+        res.json({ 
+            message: "Students promoted successfully", 
+            details: { promoted: promotedCount, graduated: graduatedCount } 
+        });
     } catch (error) {
+        await client.query('ROLLBACK');
         console.error(error);
         res.status(500).json({ error: "Server error during promotion" });
+    } finally {
+        client.release();
     }
 });
 

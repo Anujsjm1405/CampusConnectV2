@@ -1,0 +1,1 @@
+const axios = require('axios'); async function test() { try { const res = await axios.put('http://localhost:5000/api/locations/1', { name: 'Test', type: 'LAB', capacity: '30' }); console.log(res.data); } catch(e) { console.error(e.response?.data || e.message); } } test();

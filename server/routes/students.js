@@ -17,7 +17,7 @@ router.get('/professors-status', requireStudent, async (req, res) => {
                        COALESCE(ps.status, 'ACTIVE') as status
                 FROM users u
                 LEFT JOIN professor_status ps ON u.id = ps.professor_id 
-                     AND ps.day_of_week = $1 AND ps.slot_id = $2
+                     AND ps.day_of_week = $1 AND ps.slot_id = $2 AND ps.status_date = CURRENT_DATE
                 WHERE u.role = 'PROFESSOR'
                 ORDER BY u.name ASC
             `;

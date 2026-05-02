@@ -40,10 +40,13 @@ const AdminDashboard = () => {
     const [allClasses, setAllClasses] = useState([]);
     const [assignments, setAssignments] = useState([]);
     const [students, setStudents] = useState([]);
-    const [promotionModal, setPromotionModal] = useState(false);
-    const [promotionForm, setPromotionForm] = useState({ source_class_id: '', target_class_id: '' });
+
+    const [showBatchPromoteModal, setShowBatchPromoteModal] = useState(false);
+
     const [masterFilterProf, setMasterFilterProf] = useState('');
     const [locations, setLocations] = useState([]);
+    const [locationTab, setLocationTab] = useState('CLASSROOM'); // 'CLASSROOM' | 'LAB'
+    const [editLocationId, setEditLocationId] = useState(null);
     
     // Global selection state (shared between Timetable and Mapping)
     const [selectedYear, setSelectedYear] = useState('SY');
@@ -58,6 +61,7 @@ const AdminDashboard = () => {
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [showResetMappingModal, setShowResetMappingModal] = useState(false);
     const [showLocationModal, setShowLocationModal] = useState(false);
+    const [locationToDelete, setLocationToDelete] = useState(null);
     
     const [activeSlot, setActiveSlot] = useState(null);
     const [entryToDelete, setEntryToDelete] = useState(null);
@@ -262,25 +266,46 @@ const AdminDashboard = () => {
         }
     };
 
-    const handleCreateLocation = async (e) => {
+    const handleLocationSubmit = async (e) => {
         e.preventDefault();
         try {
-            await axios.post('/api/locations', newLocation);
+            if (editLocationId) {
+                await axios.put(`/api/locations/${editLocationId}`, newLocation);
+            } else {
+                await axios.post('/api/locations', newLocation);
+            }
             setShowLocationModal(false);
-            setNewLocation({ name: '', type: 'LAB', capacity: '', parent_name: '' });
+            setEditLocationId(null);
+            setNewLocation({ name: '', type: locationTab === 'CLASSROOM' ? 'CLASSROOM' : 'LAB', capacity: '', parent_name: '' });
             fetchLocations();
         } catch (err) {
-            alert(err.response?.data?.error || 'Failed to create resource');
+            alert(err.response?.data?.error || 'Failed to save resource');
         }
     };
 
-    const handleDeleteLocation = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this location?")) return;
+    const handleEditLocation = (location) => {
+        setEditLocationId(location.id);
+        setNewLocation({
+            name: location.name,
+            type: location.type,
+            capacity: location.capacity || '',
+            parent_name: location.parent_name || ''
+        });
+        setShowLocationModal(true);
+    };
+
+    const handleDeleteLocation = (location) => {
+        setLocationToDelete(location);
+    };
+
+    const confirmDeleteLocation = async () => {
+        if (!locationToDelete) return;
         try {
-            await axios.delete(`/api/locations/${id}`);
+            await axios.delete(`/api/locations/${locationToDelete.id}`);
+            setLocationToDelete(null);
             fetchLocations();
         } catch (err) {
-            alert(err.response?.data?.error || "Error deleting location");
+            alert('Failed to delete resource');
         }
     };
 
@@ -344,16 +369,25 @@ const AdminDashboard = () => {
         }
     };
 
-    const handlePromoteClass = async (e) => {
-        e.preventDefault();
+
+
+    const handleBatchPromote = async () => {
         try {
-            const res = await axios.post('/api/admin/promote-class', promotionForm);
-            alert(res.data.message);
-            setPromotionModal(false);
+            const res = await axios.post('/api/admin/promote-students');
+            const { promoted, graduated } = res.data.details || {};
+            alert(`Promotion complete!\nPromoted: ${promoted}\nGraduated (Removed): ${graduated}`);
+            setShowBatchPromoteModal(false);
             fetchStudents();
         } catch (err) {
-            alert(err.response?.data?.error || 'Promotion failed');
+            alert(err.response?.data?.error || 'Failed to promote students');
         }
+    };
+
+    const YEAR_COLORS = {
+        'SY': '#3b82f6',
+        'TY': '#10b981',
+        'B.Tech': '#8b5cf6',
+        'FY M.Tech': '#ec4899',
     };
 
     const getEntriesAt = (dayIndex, slotIndex) => {
@@ -419,7 +453,7 @@ const AdminDashboard = () => {
                     </button>
 
                     {showMenu && (
-                        <div className="absolute top-full mt-2 left-0 w-64 rounded-[2rem] shadow-2xl border p-2 z-[100] animate-in slide-in-from-top-2 duration-200" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
+                        <div className="absolute top-full mt-2 left-0 w-64 rounded-[2.5rem] p-3 z-[100] animate-in slide-in-from-top-2 duration-200 glass-panel shadow-2xl" style={{ backgroundColor: theme === 'light' ? 'rgba(255, 255, 255, 0.98)' : 'rgba(20, 20, 20, 0.98)' }}>
                             {[
                                 { id: 'master', label: 'Master Timetable', icon: LayoutGrid },
                                 { id: 'timetable', label: 'Class Timetable', icon: Calendar },
@@ -447,8 +481,8 @@ const AdminDashboard = () => {
                 <div className="flex items-center gap-2">
                     <button 
                         onClick={toggleTheme}
-                        className="p-2.5 rounded-xl transition-all active:scale-95 border"
-                        style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
+                        className="p-2.5 rounded-xl active:scale-95 glass-panel"
+                        style={{ color: 'var(--text-secondary)' }}
                     >
                         {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
                     </button>
@@ -462,7 +496,7 @@ const AdminDashboard = () => {
             </header>
 
             {/* Selection Bar (Shared for Timetable & Mapping) */}
-            {(activeTab === 'timetable' || activeTab === 'mapping') && (
+            {(activeTab === 'timetable' || activeTab === 'mapping' || activeTab === 'students') && (
                 <div className="border-b px-4 md:px-8 py-4 md:py-6 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4 md:gap-6 transition-colors duration-300" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
                     <div className="flex items-center gap-2 md:gap-4 p-1.5 md:p-2 rounded-2xl border w-full md:w-auto overflow-x-auto no-scrollbar" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
                         <div className="flex gap-1 shrink-0">
@@ -516,13 +550,26 @@ const AdminDashboard = () => {
                             <div className="space-y-1">
                                 <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Master Campus Schedule</h2>
                                 <p className="font-bold uppercase tracking-widest text-[10px] md:text-xs" style={{ color: 'var(--text-secondary)' }}>Unified view of all classes and faculty assignments</p>
+                                
+                                <div className="flex flex-wrap items-center gap-3 mt-4 pt-2">
+                                    {Object.entries(YEAR_COLORS).map(([year, color]) => (
+                                        <div key={year} className="flex items-center gap-1.5">
+                                            <div className="w-3 h-3 rounded-sm shadow-sm" style={{ backgroundColor: color }}></div>
+                                            <span className="text-[10px] font-black uppercase" style={{ color: 'var(--text-secondary)' }}>{year}</span>
+                                        </div>
+                                    ))}
+                                    <div className="flex items-center gap-1.5 ml-2 md:ml-4 border-l pl-2 md:pl-4" style={{ borderColor: 'var(--border-primary)' }}>
+                                        <div className="w-3 h-3 rounded-sm border-[1.5px] border-dashed" style={{ borderColor: 'var(--text-secondary)' }}></div>
+                                        <span className="text-[10px] font-black uppercase" style={{ color: 'var(--text-secondary)' }}>Lab Session</span>
+                                    </div>
+                                </div>
                             </div>
                             <div className="flex gap-4 w-full md:w-auto">
                                 <div className="relative flex-1 md:w-64">
                                     <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                                     <select 
                                         className="w-full pl-11 pr-4 py-3 rounded-xl border-2 outline-none focus:border-indigo-500 font-bold text-xs appearance-none"
-                                        style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+                                        style={{ backgroundColor: theme === 'light' ? 'rgba(255, 255, 255, 0.95)' : 'rgba(30, 30, 30, 0.95)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
                                         value={masterFilterProf}
                                         onChange={e => setMasterFilterProf(e.target.value)}
                                     >
@@ -539,7 +586,7 @@ const AdminDashboard = () => {
                             </div>
                         </div>
 
-                        <div className="rounded-[1.5rem] md:rounded-[2.5rem] shadow-2xl border overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
+                        <div className="rounded-[1.5rem] md:rounded-[2.5rem]  overflow-hidden glass-panel">
                             <div className="overflow-x-auto">
                                 <table className="w-full border-collapse">
                                     <thead>
@@ -564,7 +611,7 @@ const AdminDashboard = () => {
                                                         <td key={day} className="p-2 border-r min-h-[120px]" style={{ borderColor: 'var(--border-primary)' }}>
                                                             <div className="flex flex-col gap-2">
                                                                 {entries.map(entry => (
-                                                                    <div key={entry.id} className="p-3 rounded-xl text-white shadow-sm space-y-1 relative group overflow-hidden" style={{ backgroundColor: entry.session_type === 'LAB' ? '#f59e0b' : '#4f46e5' }}>
+                                                                    <div key={entry.id} className="p-3 rounded-xl text-white shadow-sm space-y-1 relative group overflow-hidden" style={{ backgroundColor: YEAR_COLORS[entry.year] || '#4f46e5', border: entry.session_type === 'LAB' ? '2px dashed rgba(255,255,255,0.6)' : 'none' }}>
                                                                         <div className="flex justify-between items-start">
                                                                             <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-white/20">{entry.year}-{entry.division}</span>
                                                                             <div className="flex items-center gap-1">
@@ -641,7 +688,7 @@ const AdminDashboard = () => {
                         </div>
 
                         {/* Grid */}
-                        <div className="rounded-[1.5rem] md:rounded-[2.5rem] shadow-2xl border overflow-hidden transition-colors duration-300" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
+                        <div className="rounded-[1.5rem] md:rounded-[2.5rem]  overflow-hidden transition-colors duration-300 glass-panel">
                             {/* Desktop Table View */}
                             <div className="hidden md:block overflow-x-auto">
                                 <table className="w-full border-collapse">
@@ -813,7 +860,7 @@ const AdminDashboard = () => {
                             </button>
                         </div>
 
-                        <div className="rounded-[1.5rem] md:rounded-[2.5rem] shadow-xl border overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
+                        <div className="rounded-[1.5rem] md:rounded-[2.5rem]  overflow-hidden glass-panel">
                             {/* Desktop Table */}
                             <div className="hidden md:block">
                                 <table className="w-full">
@@ -939,7 +986,7 @@ const AdminDashboard = () => {
                             {classAssignments
                                 .filter(ass => ass.session_type === mappingTab)
                                 .map(ass => (
-                                <div key={ass.id} className="p-4 md:p-6 rounded-2xl md:rounded-[2rem] shadow-xl border group hover:border-indigo-400 transition-all relative overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
+                                <div key={ass.id} className="p-4 md:p-6 rounded-2xl md:rounded-[2rem]  group hover:border-indigo-400 transition-all relative overflow-hidden glass-panel">
                                      <div className="absolute top-0 right-0 w-24 h-24 opacity-5 rounded-full -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-500" style={{ backgroundColor: 'var(--accent-primary)' }}></div>
                                      
                                      <div className="relative space-y-3 md:space-y-4">
@@ -988,16 +1035,18 @@ const AdminDashboard = () => {
                                 <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Student Directory</h2>
                                 <p className="font-bold uppercase tracking-widest text-[10px] md:text-xs" style={{ color: 'var(--text-secondary)' }}>Manage student profiles and academic transitions</p>
                             </div>
-                            <button 
-                                onClick={() => setPromotionModal(true)}
-                                className="w-full md:w-auto px-6 py-3.5 text-white rounded-xl md:rounded-2xl font-black text-xs md:text-sm shadow-xl hover:opacity-90 transition-all flex items-center justify-center gap-2"
-                                style={{ backgroundColor: 'var(--accent-primary)' }}
-                            >
-                                <RefreshCcw size={18} /> Promote Class
-                            </button>
+                            <div className="flex flex-col md:flex-row gap-2">
+                                <button 
+                                    onClick={() => setShowBatchPromoteModal(true)}
+                                    className="w-full md:w-auto px-6 py-3.5 bg-indigo-600 text-white rounded-xl md:rounded-2xl font-black text-xs md:text-sm shadow-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <Layers size={18} /> Batch Promote
+                                </button>
+
+                            </div>
                         </div>
 
-                        <div className="rounded-[1.5rem] md:rounded-[2.5rem] shadow-xl border overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
+                        <div className="rounded-[1.5rem] md:rounded-[2.5rem]  overflow-hidden glass-panel">
                             <div className="overflow-x-auto">
                                 <table className="w-full">
                                     <thead className="border-b" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
@@ -1010,7 +1059,7 @@ const AdminDashboard = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y" style={{ divideColor: 'var(--border-primary)' }}>
-                                        {students.map(s => (
+                                        {students.filter(s => s.year === selectedYear && s.division === selectedDivision).map(s => (
                                             <tr key={s.id} className="hover:bg-black/5 transition-colors">
                                                 <td className="px-8 py-6">
                                                     <div className="flex items-center gap-3">
@@ -1031,8 +1080,8 @@ const AdminDashboard = () => {
                                     </tbody>
                                 </table>
                             </div>
-                            {students.length === 0 && (
-                                <div className="px-8 py-20 text-center font-bold" style={{ color: 'var(--text-secondary)' }}>No students registered yet.</div>
+                            {students.filter(s => s.year === selectedYear && s.division === selectedDivision).length === 0 && (
+                                <div className="px-8 py-20 text-center font-bold" style={{ color: 'var(--text-secondary)' }}>No students registered for this class yet.</div>
                             )}
                         </div>
                     </div>
@@ -1046,16 +1095,32 @@ const AdminDashboard = () => {
                                 <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Department Resources</h2>
                                 <p className="font-bold uppercase tracking-widest text-[10px] md:text-xs" style={{ color: 'var(--text-secondary)' }}>Manage all allocated classrooms and specialized labs</p>
                             </div>
+                            <div className="flex gap-2 p-1.5 rounded-2xl border" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
+                                {['CLASSROOM', 'LAB'].map(t => (
+                                    <button 
+                                        key={t}
+                                        onClick={() => setLocationTab(t)}
+                                        className={`px-6 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${locationTab === t ? 'text-white shadow-lg' : 'hover:bg-black/5'}`}
+                                        style={{ backgroundColor: locationTab === t ? 'var(--accent-primary)' : 'transparent', color: locationTab === t ? '#fff' : 'var(--text-secondary)' }}
+                                    >
+                                        {t === 'CLASSROOM' ? 'Classrooms' : 'Labs'}
+                                    </button>
+                                ))}
+                            </div>
                             <button 
-                                onClick={() => setShowLocationModal(true)}
+                                onClick={() => {
+                                    setEditLocationId(null);
+                                    setNewLocation({ name: '', type: locationTab === 'CLASSROOM' ? 'CLASSROOM' : 'LAB', capacity: '', parent_name: '' });
+                                    setShowLocationModal(true);
+                                }}
                                 className="w-full md:w-auto px-6 py-3.5 text-white rounded-xl md:rounded-2xl font-black text-xs md:text-sm shadow-xl hover:opacity-90 transition-all flex items-center justify-center gap-2"
                                 style={{ backgroundColor: 'var(--accent-primary)' }}
                             >
-                                <Plus size={18} /> Register New Room
+                                <Plus size={18} /> Register {locationTab === 'CLASSROOM' ? 'Classroom' : 'Lab'}
                             </button>
                         </div>
 
-                        <div className="rounded-[1.5rem] md:rounded-[2.5rem] shadow-xl border overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
+                        <div className="rounded-[1.5rem] md:rounded-[2.5rem]  overflow-hidden glass-panel">
                             <div className="overflow-x-auto">
                                 <table className="w-full">
                                     <thead className="border-b" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
@@ -1067,79 +1132,139 @@ const AdminDashboard = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y" style={{ divideColor: 'var(--border-primary)' }}>
-                                        {(() => {
-                                            const parents = locations.filter(l => !l.parent_id);
-                                            const orphans = locations.filter(l => l.parent_id && !parents.some(p => p.id === l.parent_id));
-                                            
-                                            return [...parents, ...orphans].map(parent => (
-                                                <React.Fragment key={parent.id}>
-                                                    {/* Parent Row */}
-                                                    <tr className="hover:bg-black/5 transition-colors group">
-                                                        <td className="px-8 py-6">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black" style={{ backgroundColor: 'var(--accent-primary)', color: '#fff' }}>
-                                                                    <Layers size={18} />
-                                                                </div>
-                                                                <div>
-                                                                    <div className="font-black text-sm uppercase tracking-tight" style={{ color: 'var(--text-primary)' }}>{parent.name}</div>
-                                                                    <div className="text-[9px] font-black opacity-50 uppercase tracking-widest text-indigo-500">Main Lab / Root</div>
-                                                                </div>
+                                        {locationTab === 'CLASSROOM' ? (
+                                            locations.filter(l => l.type === 'CLASSROOM').map(classroom => (
+                                                <tr key={classroom.id} className="hover:bg-black/5 transition-colors group">
+                                                    <td className="px-8 py-6">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black" style={{ backgroundColor: 'var(--bg-main)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }}>
+                                                                <BookOpen size={18} />
                                                             </div>
-                                                        </td>
-                                                        <td className="px-8 py-6">
-                                                            <span className={`text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest bg-indigo-600 text-white shadow-lg shadow-indigo-500/20`}>
-                                                                {parent.type}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-8 py-6 font-bold" style={{ color: 'var(--text-secondary)' }}>{parent.capacity || 'N/A'} Students</td>
-                                                        <td className="px-8 py-6 text-center">
+                                                            <div>
+                                                                <div className="font-black text-sm uppercase tracking-tight" style={{ color: 'var(--text-primary)' }}>{classroom.name}</div>
+                                                                <div className="text-[9px] font-black opacity-50 uppercase tracking-widest text-emerald-500">Classroom</div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-8 py-6">
+                                                        <span className={`text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest bg-emerald-100 text-emerald-600`}>
+                                                            {classroom.type}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-8 py-6 font-bold" style={{ color: 'var(--text-secondary)' }}>{classroom.capacity || 'N/A'} Students</td>
+                                                    <td className="px-8 py-6 text-center">
+                                                        <div className="flex items-center justify-center gap-2">
                                                             <button 
-                                                                onClick={() => handleDeleteLocation(parent.id)}
+                                                                onClick={() => handleEditLocation(classroom)}
+                                                                className="p-3 rounded-xl transition-all hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                                                                style={{ color: 'var(--text-secondary)' }}
+                                                            >
+                                                                <Settings size={20} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleDeleteLocation(classroom)}
                                                                 className="p-3 rounded-xl transition-all hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
                                                                 style={{ color: 'var(--text-secondary)' }}
                                                             >
                                                                 <Trash2 size={20} />
                                                             </button>
-                                                        </td>
-                                                    </tr>
-                                                    
-                                                    {/* Children Rows */}
-                                                    {locations
-                                                        .filter(child => child.parent_id === parent.id)
-                                                        .map(child => (
-                                                            <tr key={child.id} className="bg-black/[0.02] dark:bg-white/[0.01] hover:bg-black/5 transition-colors border-l-4 border-indigo-500/30">
-                                                                <td className="px-8 py-5 pl-16">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black" style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent-primary)' }}>
-                                                                            {child.type === 'LAB' ? <Settings size={14} /> : <BookOpen size={14} />}
-                                                                        </div>
-                                                                        <div>
-                                                                            <div className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{child.name}</div>
-                                                                            <div className="text-[8px] font-black opacity-40 uppercase">Sub-resource</div>
-                                                                        </div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            (() => {
+                                                const labLocations = locations.filter(l => l.type === 'LAB');
+                                                const parents = labLocations.filter(l => !l.parent_id);
+                                                const orphans = labLocations.filter(l => l.parent_id && !parents.some(p => p.id === l.parent_id));
+                                                
+                                                return [...parents, ...orphans].map(parent => (
+                                                    <React.Fragment key={parent.id}>
+                                                        {/* Parent Row */}
+                                                        <tr className="hover:bg-black/5 transition-colors group">
+                                                            <td className="px-8 py-6">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black" style={{ backgroundColor: 'var(--accent-primary)', color: '#fff' }}>
+                                                                        <Layers size={18} />
                                                                     </div>
-                                                                </td>
-                                                                <td className="px-8 py-5">
-                                                                    <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest ${child.type === 'LAB' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-600'}`}>
-                                                                        {child.type}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="px-8 py-5 text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>{child.capacity || 'N/A'} Students</td>
-                                                                <td className="px-8 py-5 text-center">
+                                                                    <div>
+                                                                        <div className="font-black text-sm uppercase tracking-tight" style={{ color: 'var(--text-primary)' }}>{parent.name}</div>
+                                                                        <div className="text-[9px] font-black opacity-50 uppercase tracking-widest text-indigo-500">Main Lab / Root</div>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-8 py-6">
+                                                                <span className={`text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest bg-indigo-600 text-white shadow-lg shadow-indigo-500/20`}>
+                                                                    {parent.type}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-8 py-6 font-bold" style={{ color: 'var(--text-secondary)' }}>{parent.capacity || 'N/A'} Students</td>
+                                                            <td className="px-8 py-6 text-center">
+                                                                <div className="flex items-center justify-center gap-2">
                                                                     <button 
-                                                                        onClick={() => handleDeleteLocation(child.id)}
-                                                                        className="p-2 rounded-lg transition-all hover:text-red-500 hover:bg-red-50"
+                                                                        onClick={() => handleEditLocation(parent)}
+                                                                        className="p-3 rounded-xl transition-all hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
                                                                         style={{ color: 'var(--text-secondary)' }}
                                                                     >
-                                                                        <Trash2 size={16} />
+                                                                        <Settings size={20} />
                                                                     </button>
-                                                                </td>
-                                                            </tr>
-                                                        ))
-                                                    }
-                                                </React.Fragment>
-                                            ));
-                                        })()}
+                                                                    <button 
+                                                                        onClick={() => handleDeleteLocation(parent)}
+                                                                        className="p-3 rounded-xl transition-all hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                                        style={{ color: 'var(--text-secondary)' }}
+                                                                    >
+                                                                        <Trash2 size={20} />
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                        
+                                                        {/* Children Rows */}
+                                                        {labLocations
+                                                            .filter(child => child.parent_id === parent.id)
+                                                            .map(child => (
+                                                                <tr key={child.id} className="bg-black/[0.02] dark:bg-white/[0.01] hover:bg-black/5 transition-colors border-l-4 border-indigo-500/30">
+                                                                    <td className="px-8 py-5 pl-16">
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black" style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent-primary)' }}>
+                                                                                <Settings size={14} />
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{child.name}</div>
+                                                                                <div className="text-[8px] font-black opacity-40 uppercase">Sub-resource</div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-8 py-5">
+                                                                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest bg-amber-100 text-amber-600`}>
+                                                                            {child.type}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-8 py-5 text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>{child.capacity || 'N/A'} Students</td>
+                                                                    <td className="px-8 py-5 text-center">
+                                                                        <div className="flex items-center justify-center gap-2">
+                                                                            <button 
+                                                                                onClick={() => handleEditLocation(child)}
+                                                                                className="p-2 rounded-xl transition-all hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                                                                                style={{ color: 'var(--text-secondary)' }}
+                                                                            >
+                                                                                <Settings size={16} />
+                                                                            </button>
+                                                                            <button 
+                                                                                onClick={() => handleDeleteLocation(child)}
+                                                                                className="p-2 rounded-xl transition-all hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                                                style={{ color: 'var(--text-secondary)' }}
+                                                                            >
+                                                                                <Trash2 size={16} />
+                                                                            </button>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                    </React.Fragment>
+                                                ));
+                                            })()
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
@@ -1156,7 +1281,7 @@ const AdminDashboard = () => {
             {/* Professor Registration Modal */}
             {showProfModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                    <div className="w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300" style={{ backgroundColor: 'var(--bg-card)' }}>
+                    <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden animate-in fade-in zoom-in duration-300 glass-panel">
                         <div className="px-6 md:px-10 py-6 md:py-8 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
                             <h3 className="font-black text-xl md:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Register Faculty</h3>
                             <button onClick={() => setShowProfModal(false)} className="p-2 rounded-2xl hover:opacity-70 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={20} className="md:w-6 md:h-6" /></button>
@@ -1197,7 +1322,7 @@ const AdminDashboard = () => {
             {/* Assignment Mapping Modal */}
             {showAssignModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                    <div className="w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300" style={{ backgroundColor: 'var(--bg-card)' }}>
+                    <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden animate-in fade-in zoom-in duration-300 glass-panel">
                         <div className="px-6 md:px-10 py-6 md:py-8 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
                             <div>
                                 <h3 className="font-black text-xl md:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Faculty Allotment</h3>
@@ -1249,29 +1374,31 @@ const AdminDashboard = () => {
             {/* Location Registration Modal */}
             {showLocationModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                    <div className="w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300" style={{ backgroundColor: 'var(--bg-card)' }}>
+                    <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden animate-in fade-in zoom-in duration-300 glass-panel">
                         <div className="px-6 md:px-10 py-6 md:py-8 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
-                            <h3 className="font-black text-xl md:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Register Resource</h3>
+                            <h3 className="font-black text-xl md:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>{editLocationId ? 'Edit Resource' : 'Register Resource'}</h3>
                             <button onClick={() => setShowLocationModal(false)} className="p-2 rounded-2xl hover:opacity-70 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={20} className="md:w-6 md:h-6" /></button>
                         </div>
-                        <form onSubmit={handleCreateLocation} className="p-6 md:p-10 space-y-4 md:space-y-6">
-                            <div className="flex gap-4 p-4 rounded-2xl border-2 mb-4" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
-                                <label className="flex items-center gap-3 cursor-pointer flex-1 group">
-                                    <input 
-                                        type="checkbox" 
-                                        className="w-5 h-5 rounded-lg border-2 accent-indigo-600 cursor-pointer"
-                                        checked={!newLocation.parent_name || newLocation.parent_name === newLocation.name}
-                                        onChange={(e) => {
-                                            if (e.target.checked) {
-                                                setNewLocation({...newLocation, parent_name: newLocation.name});
-                                            } else {
-                                                setNewLocation({...newLocation, parent_name: ''});
-                                            }
-                                        }}
-                                    />
-                                    <span className="text-[11px] font-black uppercase tracking-widest text-indigo-500 group-hover:text-indigo-600 transition-colors">Register as Main Lab</span>
-                                </label>
-                            </div>
+                        <form onSubmit={handleLocationSubmit} className="p-6 md:p-10 space-y-4 md:space-y-6">
+                            {newLocation.type === 'LAB' && (
+                                <div className="flex gap-4 p-4 rounded-2xl border-2 mb-4" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
+                                    <label className="flex items-center gap-3 cursor-pointer flex-1 group">
+                                        <input 
+                                            type="checkbox" 
+                                            className="w-5 h-5 rounded-lg border-2 accent-indigo-600 cursor-pointer"
+                                            checked={!newLocation.parent_name || newLocation.parent_name === newLocation.name}
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setNewLocation({...newLocation, parent_name: newLocation.name});
+                                                } else {
+                                                    setNewLocation({...newLocation, parent_name: ''});
+                                                }
+                                            }}
+                                        />
+                                        <span className="text-[11px] font-black uppercase tracking-widest text-indigo-500 group-hover:text-indigo-600 transition-colors">Register as Main Lab</span>
+                                    </label>
+                                </div>
+                            )}
 
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Resource Name</label>
@@ -1279,7 +1406,7 @@ const AdminDashboard = () => {
                                     required 
                                     className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" 
                                     style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
-                                    placeholder="e.g. Room 302 or Computer Lab 1" 
+                                    placeholder={newLocation.type === 'LAB' ? "e.g. Computer Lab 1" : "e.g. Room 302"} 
                                     value={newLocation.name} 
                                     onChange={e => {
                                         const isMain = !newLocation.parent_name || newLocation.parent_name === newLocation.name;
@@ -1292,33 +1419,10 @@ const AdminDashboard = () => {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Resource Type</label>
-                                <div className="flex gap-2">
-                                    {['CLASSROOM', 'LAB'].map(type => (
-                                        <button 
-                                            key={type} 
-                                            type="button"
-                                            onClick={() => setNewLocation({...newLocation, type})}
-                                            className={`flex-1 py-3 md:py-3.5 rounded-lg md:rounded-xl border-4 font-black transition-all text-[10px] ${
-                                                newLocation.type === type 
-                                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-500/20' 
-                                                : 'border-transparent'
-                                            }`}
-                                            style={{ 
-                                                backgroundColor: newLocation.type === type ? '#4f46e5' : 'var(--bg-main)',
-                                                color: newLocation.type === type ? '#fff' : 'var(--text-secondary)'
-                                            }}
-                                        >
-                                            {type}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            <div className="space-y-2">
                                 <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Capacity (Student Count)</label>
                                 <input type="number" className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="60" value={newLocation.capacity} onChange={e => setNewLocation({...newLocation, capacity: e.target.value})} />
                             </div>
-                            {(!newLocation.parent_name || newLocation.parent_name !== newLocation.name) && (
+                            {newLocation.type === 'LAB' && (!newLocation.parent_name || newLocation.parent_name !== newLocation.name) && (
                                 <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
                                     <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Parent Lab (Mandatory)</label>
                                     <div className="relative">
@@ -1333,7 +1437,7 @@ const AdminDashboard = () => {
                                         />
                                         <datalist id="parent-labs">
                                             {locations
-                                                .filter(l => l.type === 'LAB' && !l.parent_id)
+                                                .filter(l => l.type === 'LAB' && !l.parent_id && l.id !== editLocationId)
                                                 .map(l => (
                                                     <option key={l.id} value={l.name} />
                                                 ))}
@@ -1341,7 +1445,7 @@ const AdminDashboard = () => {
                                     </div>
                                 </div>
                             )}
-                            <button className="w-full text-white py-4 md:py-5 rounded-xl md:rounded-2xl font-black text-base md:text-lg hover:opacity-90 transition-all shadow-2xl mt-2 md:mt-4" style={{ backgroundColor: 'var(--accent-primary)' }}>Confirm Registration</button>
+                            <button className="w-full text-white py-4 md:py-5 rounded-xl md:rounded-2xl font-black text-base md:text-lg hover:opacity-90 transition-all shadow-2xl mt-2 md:mt-4" style={{ backgroundColor: 'var(--accent-primary)' }}>{editLocationId ? 'Save Changes' : 'Confirm Registration'}</button>
                         </form>
                     </div>
                 </div>
@@ -1350,7 +1454,7 @@ const AdminDashboard = () => {
             {/* Timetable Assignment Modal */}
             {showSlotModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                    <div className="w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300" style={{ backgroundColor: 'var(--bg-card)' }}>
+                    <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden animate-in fade-in zoom-in duration-300 glass-panel">
                         <div className="px-6 md:px-10 py-6 md:py-8 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
                             <div>
                                 <h3 className="font-black text-xl md:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Assign Slot</h3>
@@ -1459,48 +1563,49 @@ const AdminDashboard = () => {
                 </div>
             )}
 
-            {/* Promotion Modal */}
-            {promotionModal && (
+            {/* Batch Promotion Modal */}
+            {showBatchPromoteModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                    <div className="w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300" style={{ backgroundColor: 'var(--bg-card)' }}>
+                    <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden animate-in fade-in zoom-in duration-300 glass-panel">
                         <div className="px-6 md:px-10 py-6 md:py-8 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
-                            <h3 className="font-black text-xl md:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Promote Entire Class</h3>
-                            <button onClick={() => setPromotionModal(false)} className="p-2 rounded-2xl hover:opacity-70 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={20} /></button>
+                            <h3 className="font-black text-xl md:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Global Batch Promotion</h3>
+                            <button onClick={() => setShowBatchPromoteModal(false)} className="p-2 rounded-2xl hover:opacity-70 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={20} /></button>
                         </div>
-                        <form onSubmit={handlePromoteClass} className="p-6 md:p-10 space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Source Class (Current)</label>
-                                <select required className="w-full px-5 py-4 border-2 rounded-2xl outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={promotionForm.source_class_id} onChange={e => setPromotionForm({...promotionForm, source_class_id: e.target.value})}>
-                                    <option value="">Select Source Class</option>
-                                    {allClasses.map(c => <option key={c.id} value={c.id}>{c.year} - {c.division}</option>)}
-                                </select>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Target Class (Destination)</label>
-                                <select required className="w-full px-5 py-4 border-2 rounded-2xl outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={promotionForm.target_class_id} onChange={e => setPromotionForm({...promotionForm, target_class_id: e.target.value})}>
-                                    <option value="">Select Destination</option>
-                                    {allClasses.map(c => <option key={c.id} value={c.id}>{c.year} - {c.division}</option>)}
-                                    <option value="GRADUATED">🎓 MARK AS GRADUATED</option>
-                                </select>
-                            </div>
-                            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-200 dark:border-amber-800">
-                                <div className="flex gap-3">
-                                    <AlertCircle className="text-amber-600 shrink-0" size={20} />
-                                    <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">Warning: This will move ALL active students from the source class to the target class. This action cannot be easily undone.</p>
+                        <div className="p-6 md:p-10 space-y-6 text-center">
+                            <p className="font-bold text-sm" style={{ color: 'var(--text-secondary)' }}>
+                                This action will automatically:
+                            </p>
+                            <ul className="text-left text-sm font-bold space-y-2" style={{ color: 'var(--text-primary)' }}>
+                                <li className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> Promote SY students to TY</li>
+                                <li className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> Promote TY students to B.Tech</li>
+                                <li className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500"></div> Delete B.Tech & M.Tech students (Graduation)</li>
+                            </ul>
+                            <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-2xl border border-red-200 dark:border-red-800">
+                                <div className="flex gap-3 text-left">
+                                    <AlertCircle className="text-red-600 shrink-0" size={20} />
+                                    <p className="text-[10px] font-bold text-red-700 dark:text-red-400">Warning: Graduating students will be permanently deleted from the database. This cannot be undone.</p>
                                 </div>
                             </div>
-                            <button className="w-full text-white py-5 rounded-2xl font-black text-lg hover:opacity-90 transition-all shadow-2xl" style={{ backgroundColor: 'var(--accent-primary)' }}>Promote Students</button>
-                        </form>
+                            <button 
+                                onClick={handleBatchPromote}
+                                className="w-full text-white py-5 rounded-2xl font-black text-lg hover:opacity-90 transition-all shadow-2xl bg-indigo-600 hover:bg-indigo-700"
+                            >
+                                Execute Batch Promotion
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
 
+            {/* Promotion Modal */}
+
+
             {/* Confirmation Modals */}
-            {(entryToDelete || assignmentToDelete || professorToDelete || showResetModal || showResetMappingModal) && (
+            {(entryToDelete || assignmentToDelete || professorToDelete || locationToDelete || showResetModal || showResetMappingModal) && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-                    <div className="w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden p-10 text-center space-y-6" style={{ backgroundColor: 'var(--bg-card)' }}>
-                        <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto text-white shadow-xl ${showResetModal || showResetMappingModal || professorToDelete ? 'bg-red-500' : 'bg-slate-900'}`}>
-                            {showResetModal || showResetMappingModal ? <RefreshCcw size={40} /> : professorToDelete ? <Trash2 size={40} /> : <AlertCircle size={40} />}
+                    <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden p-10 text-center space-y-6 glass-panel">
+                        <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto text-white shadow-xl ${showResetModal || showResetMappingModal || professorToDelete || locationToDelete ? 'bg-red-500' : 'bg-slate-900'}`}>
+                            {showResetModal || showResetMappingModal ? <RefreshCcw size={40} /> : (professorToDelete || locationToDelete) ? <Trash2 size={40} /> : <AlertCircle size={40} />}
                         </div>
                         
                         <div className="space-y-2">
@@ -1510,13 +1615,14 @@ const AdminDashboard = () => {
                                  showResetMappingModal ? `This will clear all subject mappings for ${selectedYear} - ${selectedDivision}.` :
                                  professorToDelete ? `Deleting ${professorToDelete.name} will also remove all their assignments and timetable slots.` :
                                  assignmentToDelete ? `This mapping for ${assignmentToDelete.subject_name} will be removed.` :
+                                 locationToDelete ? `Deleting ${locationToDelete.name} will also remove all associated timetable slots.` :
                                  `The session "${entryToDelete?.subject}" will be deleted.`}
                             </p>
                         </div>
 
                         <div className="flex gap-3">
                             <button 
-                                onClick={() => { setEntryToDelete(null); setAssignmentToDelete(null); setProfessorToDelete(null); setShowResetModal(false); setShowResetMappingModal(false); }}
+                                onClick={() => { setEntryToDelete(null); setAssignmentToDelete(null); setProfessorToDelete(null); setLocationToDelete(null); setShowResetModal(false); setShowResetMappingModal(false); }}
                                 className="flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:opacity-70 transition-all"
                                 style={{ backgroundColor: 'var(--bg-main)', color: 'var(--text-secondary)' }}
                             >
@@ -1528,9 +1634,10 @@ const AdminDashboard = () => {
                                     else if (showResetMappingModal) handleResetMappings();
                                     else if (professorToDelete) handleDeleteProfessor();
                                     else if (assignmentToDelete) handleDeleteAssignment();
+                                    else if (locationToDelete) confirmDeleteLocation();
                                     else handleDeleteEntry();
                                 }}
-                                className={`flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-white transition-all active:scale-95 shadow-xl ${showResetModal || showResetMappingModal || professorToDelete ? 'bg-red-500 hover:bg-red-600' : 'bg-slate-900 hover:bg-slate-800 dark:bg-slate-800'}`}
+                                className={`flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-white transition-all active:scale-95 shadow-xl ${showResetModal || showResetMappingModal || professorToDelete || locationToDelete ? 'bg-red-500 hover:bg-red-600' : 'bg-slate-900 hover:bg-slate-800 dark:bg-slate-800'}`}
                             >
                                 Confirm
                             </button>
