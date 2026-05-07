@@ -69,13 +69,17 @@ const AdminDashboard = () => {
     const [professorToDelete, setProfessorToDelete] = useState(null);
 
     // Form states
-    const [newProf, setNewProf] = useState({ name: '', login_id: '', password: '', designation: 'Assistant Professor' });
+    const [newProf, setNewProf] = useState({ name: '', email: '', login_id: '', password: '', designation: 'Assistant Professor' });
     const [newEntry, setNewEntry] = useState({ assignment_id: '', location_id: '', session_type: 'LECTURE', batch: '', class_id: '' });
     const [newLocation, setNewLocation] = useState({ name: '', type: 'LAB', capacity: '', parent_name: '' });
     const [assignmentForm, setAssignmentForm] = useState({ 
         professor_id: '', 
         subject_name: '', 
         session_type: 'LECTURE' 
+    });
+    const [showStudentModal, setShowStudentModal] = useState(false);
+    const [studentForm, setStudentForm] = useState({ 
+        name: '', email: '', prn: '', password: '', class_id: '', batch: '' 
     });
 
     // Computed
@@ -194,8 +198,8 @@ const AdminDashboard = () => {
         e.preventDefault();
         try {
             await axios.post('/api/admin/professors', newProf);
-            setNewProf({ name: '', login_id: '', password: '', designation: 'Assistant Professor' });
             setShowProfModal(false);
+            setNewProf({ name: '', email: '', login_id: '', password: '', designation: 'Assistant Professor' });
             fetchInitialData();
         } catch (err) {
             alert(err.response?.data?.error || 'Failed to create professor');
@@ -292,6 +296,28 @@ const AdminDashboard = () => {
             parent_name: location.parent_name || ''
         });
         setShowLocationModal(true);
+    };
+
+    const handleAddStudent = async (e) => {
+        e.preventDefault();
+        try {
+            await axios.post('/api/admin/students', studentForm);
+            setShowStudentModal(false);
+            setStudentForm({ name: '', email: '', prn: '', password: '', class_id: '', batch: '' });
+            fetchStudents();
+        } catch (err) {
+            alert(err.response?.data?.error || 'Failed to register student');
+        }
+    };
+
+    const handleDeleteStudent = async (id) => {
+        if (!window.confirm('Are you sure you want to delete this student?')) return;
+        try {
+            await axios.delete(`/api/admin/students/${id}`);
+            fetchStudents();
+        } catch (err) {
+            alert('Failed to delete student');
+        }
     };
 
     const handleDeleteLocation = (location) => {
@@ -852,7 +878,7 @@ const AdminDashboard = () => {
                                 <p className="font-bold uppercase tracking-widest text-[10px] md:text-xs" style={{ color: 'var(--text-secondary)' }}>Manage all registered faculty members</p>
                             </div>
                             <button 
-                                onClick={() => setShowProfModal(true)}
+                                onClick={() => { setNewProf({ name: '', email: '', login_id: '', password: '', designation: 'Assistant Professor' }); setShowProfModal(true); }}
                                 className="w-full md:w-auto px-6 py-3.5 text-white rounded-xl md:rounded-2xl font-black text-xs md:text-sm shadow-xl hover:opacity-90 transition-all flex items-center justify-center gap-2"
                                 style={{ backgroundColor: 'var(--accent-primary)' }}
                             >
@@ -867,6 +893,7 @@ const AdminDashboard = () => {
                                     <thead className="border-b" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
                                         <tr>
                                             <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Professor Name</th>
+                                            <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Email</th>
                                             <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Designation</th>
                                             <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Login ID</th>
                                             <th className="px-8 py-5 text-center text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Actions</th>
@@ -881,6 +908,7 @@ const AdminDashboard = () => {
                                                         <div className="font-black" style={{ color: 'var(--text-primary)' }}>{p.name}</div>
                                                     </div>
                                                 </td>
+                                                <td className="px-8 py-6 font-bold" style={{ color: 'var(--text-secondary)' }}>{p.email || '-'}</td>
                                                 <td className="px-8 py-6">
                                                     <select 
                                                         className="px-4 py-2 border rounded-xl font-bold text-xs outline-none focus:border-indigo-500 cursor-pointer"
@@ -1029,8 +1057,8 @@ const AdminDashboard = () => {
                 )}
                 {/* --- TAB 4: STUDENTS & PROMOTION --- */}
                 {activeTab === 'students' && (
-                    <div className="space-y-8">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+                    <div className="space-y-8 relative z-10">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 relative z-20">
                             <div className="space-y-1">
                                 <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Student Directory</h2>
                                 <p className="font-bold uppercase tracking-widest text-[10px] md:text-xs" style={{ color: 'var(--text-secondary)' }}>Manage student profiles and academic transitions</p>
@@ -1042,7 +1070,12 @@ const AdminDashboard = () => {
                                 >
                                     <Layers size={18} /> Batch Promote
                                 </button>
-
+                                <button 
+                                    onClick={() => setShowStudentModal(true)}
+                                    className="w-full md:w-auto px-6 py-3.5 bg-emerald-600 text-white rounded-xl md:rounded-2xl font-black text-xs md:text-sm shadow-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <UserPlus size={18} /> Register Student
+                                </button>
                             </div>
                         </div>
 
@@ -1052,10 +1085,12 @@ const AdminDashboard = () => {
                                     <thead className="border-b" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
                                         <tr>
                                             <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Student Name</th>
+                                            <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Email</th>
                                             <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>PRN</th>
                                             <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Class</th>
                                             <th className="px-8 py-5 text-left text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Batch</th>
                                             <th className="px-8 py-5 text-center text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Status</th>
+                                            <th className="px-8 py-5 text-right text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y" style={{ divideColor: 'var(--border-primary)' }}>
@@ -1067,13 +1102,22 @@ const AdminDashboard = () => {
                                                         <div className="font-black" style={{ color: 'var(--text-primary)' }}>{s.name}</div>
                                                     </div>
                                                 </td>
+                                                <td className="px-8 py-6 font-bold" style={{ color: 'var(--text-secondary)' }}>{s.email || '-'}</td>
                                                 <td className="px-8 py-6 font-bold" style={{ color: 'var(--text-secondary)' }}>{s.prn}</td>
                                                 <td className="px-8 py-6 font-bold" style={{ color: 'var(--text-primary)' }}>{s.year} - {s.division}</td>
-                                                <td className="px-8 py-6 font-bold" style={{ color: 'var(--text-secondary)' }}>{s.batch}</td>
+                                                <td className="px-8 py-6 font-bold" style={{ color: 'var(--text-secondary)' }}>{s.batch || 'Full Class'}</td>
                                                 <td className="px-8 py-6 text-center">
                                                     <span className={`text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest ${s.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-600'}`}>
                                                         {s.status}
                                                     </span>
+                                                </td>
+                                                <td className="px-8 py-6 text-right">
+                                                    <button 
+                                                        onClick={() => handleDeleteStudent(s.id)}
+                                                        className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))}
@@ -1294,6 +1338,10 @@ const AdminDashboard = () => {
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Login ID</label>
                                 <input required className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="smith_j" value={newProf.login_id} onChange={e => setNewProf({...newProf, login_id: e.target.value})} />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Email ID</label>
+                                <input required type="email" className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="smith@college.edu" value={newProf.email} onChange={e => setNewProf({...newProf, email: e.target.value})} />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Designation</label>
@@ -1599,6 +1647,106 @@ const AdminDashboard = () => {
 
             {/* Promotion Modal */}
 
+
+            {/* Student Registration Modal */}
+            {showStudentModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+                    <div className="w-full max-w-xl rounded-[2.5rem] overflow-hidden glass-panel animate-in zoom-in-95 duration-200">
+                        <div className="px-8 py-6 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-emerald-500/10 rounded-xl text-emerald-600"><UserPlus size={24} /></div>
+                                <h3 className="text-xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Register New Student</h3>
+                            </div>
+                            <button onClick={() => setShowStudentModal(false)} className="p-2 hover:bg-black/5 rounded-full transition-all"><X size={20} /></button>
+                        </div>
+                        
+                        <form onSubmit={handleAddStudent} className="p-8 space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Full Name</label>
+                                    <input 
+                                        type="text" required placeholder="John Doe"
+                                        className="w-full px-5 py-3.5 border-2 rounded-xl outline-none focus:border-emerald-500 font-bold transition-all text-sm"
+                                        style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+                                        value={studentForm.name} onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Email ID</label>
+                                    <input 
+                                        type="email" required placeholder="john@example.com"
+                                        className="w-full px-5 py-3.5 border-2 rounded-xl outline-none focus:border-emerald-500 font-bold transition-all text-sm"
+                                        style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+                                        value={studentForm.email} onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>PRN Number</label>
+                                    <input 
+                                        type="text" required placeholder="Enter PRN"
+                                        className="w-full px-5 py-3.5 border-2 rounded-xl outline-none focus:border-emerald-500 font-bold transition-all text-sm"
+                                        style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+                                        value={studentForm.prn} onChange={(e) => setStudentForm({ ...studentForm, prn: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Login Password</label>
+                                    <input 
+                                        type="password" required placeholder="••••••••"
+                                        className="w-full px-5 py-3.5 border-2 rounded-xl outline-none focus:border-emerald-500 font-bold transition-all text-sm"
+                                        style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+                                        value={studentForm.password} onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Assign Class</label>
+                                    <select 
+                                        required
+                                        className="w-full px-5 py-3.5 border-2 rounded-xl outline-none focus:border-emerald-500 font-bold transition-all text-sm appearance-none"
+                                        style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+                                        value={studentForm.class_id} onChange={(e) => setStudentForm({ ...studentForm, class_id: e.target.value })}
+                                    >
+                                        <option value="">Select Class</option>
+                                        {allClasses.map(c => (
+                                            <option key={c.id} value={c.id}>{c.year} - {c.division}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Assign Batch (Optional)</label>
+                                    <select 
+                                        className="w-full px-5 py-3.5 border-2 rounded-xl outline-none focus:border-emerald-500 font-bold transition-all text-sm appearance-none"
+                                        style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+                                        value={studentForm.batch} onChange={(e) => setStudentForm({ ...studentForm, batch: e.target.value })}
+                                    >
+                                        <option value="">Full Class</option>
+                                        <option value="Batch 1">Batch 1</option>
+                                        <option value="Batch 2">Batch 2</option>
+                                        <option value="Batch 3">Batch 3</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-4 pt-4">
+                                <button 
+                                    type="button"
+                                    onClick={() => setShowStudentModal(false)}
+                                    className="flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:opacity-70 transition-all"
+                                    style={{ backgroundColor: 'var(--bg-main)', color: 'var(--text-secondary)' }}
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit"
+                                    className="flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-white transition-all active:scale-95 shadow-xl bg-emerald-600 hover:bg-emerald-700"
+                                >
+                                    Register Student
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {/* Confirmation Modals */}
             {(entryToDelete || assignmentToDelete || professorToDelete || locationToDelete || showResetModal || showResetMappingModal) && (

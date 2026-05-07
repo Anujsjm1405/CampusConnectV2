@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import Login from './pages/Login';
-import Register from './pages/Register';
 import AdminDashboard from './pages/AdminDashboard';
 import ProfessorDashboard from './pages/ProfessorDashboard';
 import StudentDashboard from './pages/StudentDashboard';
@@ -38,12 +37,13 @@ function App() {
           <div className="min-h-screen font-sans">
             <Routes>
               <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
+
               <Route path="/admin" element={
                   <ProtectedRoute role="ADMIN">
                       <AdminDashboard />
                   </ProtectedRoute>
               } />
+              
               <Route path="/professor" element={
                   <ProtectedRoute role="PROFESSOR">
                       <ProfessorDashboard />

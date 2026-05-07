@@ -6,7 +6,10 @@ const http = require('http');
 const { Server } = require('socket.io');
 require('dotenv').config();
 
+const { initCronJobs } = require('./cron');
+
 const app = express();
+initCronJobs(); // Start scheduled tasks
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {

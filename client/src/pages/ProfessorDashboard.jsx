@@ -312,8 +312,13 @@ const ProfessorDashboard = () => {
                                         <div 
                                             key={slot.id}
                                             onClick={() => setShowStatusModal({ day: todayDay, slot: slot.id, currentStatus: status })}
-                                            className="rounded-2xl md:rounded-[2rem] p-3 md:p-5 flex items-center gap-3 md:gap-6 cursor-pointer group active:scale-[0.98] glass-panel"
+                                            className={`rounded-2xl md:rounded-[2rem] p-3 md:p-5 flex items-center gap-3 md:gap-6 cursor-pointer group active:scale-[0.98] glass-panel relative ${getCurrentSlotId(currentTime) === slot.id ? 'ring-4 ring-indigo-500/20 scale-[1.01]' : ''}`}
                                         >
+                                            {getCurrentSlotId(currentTime) === slot.id && (
+                                                <div className="absolute -top-2 right-8 bg-indigo-600 text-white text-[8px] md:text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg animate-pulse z-10">
+                                                    Ongoing
+                                                </div>
+                                            )}
                                             <div className="w-16 md:w-24 text-center border-r-2 pr-3 md:pr-6 space-y-0.5 md:space-y-1" style={{ borderColor: 'var(--border-secondary)' }}>
                                                 <div className="text-[9px] md:text-xs font-black leading-none" style={{ color: 'var(--text-primary)' }}>{slot.time.split(' – ')[0]}</div>
                                                 <div className="font-black text-xs md:text-base" style={{ color: 'var(--accent-primary)' }}>-</div>

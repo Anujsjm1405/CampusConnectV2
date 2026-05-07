@@ -7,15 +7,15 @@ const { requireAdmin } = require('../middleware/auth');
 // Professor Management
 router.post('/professors', requireAdmin, async (req, res) => {
     try {
-        const { name, login_id, password, designation } = req.body;
+        const { name, email, login_id, password, designation } = req.body;
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
         
         const insertQuery = `
-            INSERT INTO users (name, login_id, password, role, designation)
-            VALUES ($1, $2, $3, 'PROFESSOR', $4) RETURNING id, name, login_id, role, designation
+            INSERT INTO users (name, email, login_id, password, role, designation)
+            VALUES ($1, $2, $3, $4, 'PROFESSOR', $5) RETURNING id, name, email, login_id, role, designation
         `;
-        const newProf = await db.query(insertQuery, [name, login_id, hashedPassword, designation || 'Assistant Professor']);
+        const newProf = await db.query(insertQuery, [name, email, login_id, hashedPassword, designation || 'Assistant Professor']);
         res.status(201).json(newProf.rows[0]);
     } catch (error) {
         if (error.code === '23505') {
@@ -147,6 +147,37 @@ router.get('/students', requireAdmin, async (req, res) => {
         `;
         const result = await db.query(query);
         res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ error: "Server error" });
+    }
+});
+
+router.post('/students', requireAdmin, async (req, res) => {
+    try {
+        const { name, email, prn, password, class_id, batch } = req.body;
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        const query = `
+            INSERT INTO students (name, email, prn, password, class_id, batch)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id, name, email, prn, class_id, batch
+        `;
+        const result = await db.query(query, [name, email, prn, hashedPassword, class_id, batch || null]);
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        if (error.code === '23505') {
+            return res.status(409).json({ error: "PRN or Email already exists." });
+        }
+        console.error(error);
+        res.status(500).json({ error: "Server error" });
+    }
+});
+
+router.delete('/students/:id', requireAdmin, async (req, res) => {
+    try {
+        await db.query("DELETE FROM students WHERE id = $1", [req.params.id]);
+        res.json({ message: "Student deleted successfully" });
     } catch (error) {
         res.status(500).json({ error: "Server error" });
     }

@@ -110,6 +110,8 @@ const StudentDashboard = () => {
             case 'ACTIVE': return { icon: <CheckCircle2 size={14} />, color: '#10b981', label: 'Available', vibrant: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400' };
             case 'BUSY': return { icon: <AlertCircle size={14} />, color: '#f59e0b', label: 'Busy', vibrant: 'bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400' };
             case 'LEAVE': return { icon: <XCircle size={14} />, color: '#ef4444', label: 'On Leave', vibrant: 'bg-rose-500/10', text: 'text-rose-600 dark:text-rose-400' };
+            case 'LECTURE': return { icon: <BookOpen size={14} />, color: '#f43f5e', label: 'In Lecture', vibrant: 'bg-rose-500/10', text: 'text-rose-600 dark:text-rose-400' };
+            case 'LAB': return { icon: <Coffee size={14} />, color: '#f59e0b', label: 'In Lab', vibrant: 'bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400' };
             default: return { icon: <RefreshCw size={14} />, color: '#10b981', label: 'Available', vibrant: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400' };
         }
     };
@@ -221,21 +223,17 @@ const StudentDashboard = () => {
                     <div className="absolute top-0 right-0 w-60 h-60 bg-indigo-500/10 rounded-full blur-[60px] -mr-30 -mt-30 group-hover:bg-indigo-500/20 transition-all duration-700"></div>
                     <div className="relative flex items-center justify-between gap-6">
                         <div className="space-y-1">
-                            <h2 className="text-4xl md:text-5xl font-black tracking-tighter" style={{ color: 'var(--text-primary)' }}>
-                                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                            <h2 className="text-5xl md:text-7xl font-black tracking-tighter" style={{ color: 'var(--text-primary)' }}>
+                                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
                             </h2>
-                            <p className="font-black text-sm opacity-60" style={{ color: 'var(--text-secondary)' }}>
-                                {currentTime.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                            <p className="font-black text-sm md:text-base uppercase tracking-widest opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                {currentTime.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                             </p>
                         </div>
-                        <div className="flex flex-col items-end gap-2">
-                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg ${inCollege ? 'bg-emerald-500 text-white' : 'bg-slate-500 text-white'}`}>
-                                {inCollege ? '• Campus Active' : '• Off Hours'}
+                        <div className="flex flex-col items-end justify-center">
+                            <span className={`px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl transition-all duration-500 ${isCollegeHours() ? 'bg-emerald-500 text-white shadow-emerald-500/20' : 'bg-slate-500 text-white shadow-slate-500/20'}`}>
+                                {isCollegeHours() ? '• Campus Active' : '• Off Hours'}
                             </span>
-                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/5">
-                                <Clock size={14} className="text-indigo-500" />
-                                <span className="text-[10px] font-bold" style={{ color: 'var(--text-primary)' }}>{currentSlotIdx !== -1 ? SLOTS[currentSlotIdx].time.split(' – ')[0] : "Break"}</span>
-                            </div>
                         </div>
                     </div>
                 </section>

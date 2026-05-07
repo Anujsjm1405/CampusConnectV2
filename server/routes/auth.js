@@ -33,36 +33,7 @@ router.post('/login', async (req, res) => {
     }
 });
 
-router.post('/student-register', async (req, res) => {
-    try {
-        const { prn, name, year, division, batch, password } = req.body;
-        
-        const classResult = await db.query('SELECT id FROM classes WHERE year = $1 AND division = $2', [year, division]);
-        if (classResult.rows.length === 0) {
-            return res.status(400).json({ error: "Selected class does not exist." });
-        }
-        const class_id = classResult.rows[0].id;
 
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-
-        const insertQuery = `
-            INSERT INTO students (prn, name, class_id, batch, password, status)
-            VALUES ($1, $2, $3, $4, $5, 'ACTIVE')
-            RETURNING *
-        `;
-        const result = await db.query(insertQuery, [prn, name, class_id, batch, hashedPassword]);
-        const student = result.rows[0];
-        
-        res.status(201).json({ message: "Student registered successfully", prn: student.prn });
-    } catch (error) {
-        if (error.code === '23505') {
-            return res.status(409).json({ error: "PRN already registered. Please login." });
-        }
-        console.error(error);
-        res.status(500).json({ error: "Server error" });
-    }
-});
 
 router.post('/student-login', async (req, res) => {
     try {

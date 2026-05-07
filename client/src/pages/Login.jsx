@@ -148,12 +148,6 @@ const Login = () => {
                         </div>
 
                         <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 px-4 rounded-2xl transition-all active:scale-[0.98] shadow-xl shadow-indigo-500/20 mt-2">Access Hub</button>
-
-                        <div className="text-center pt-2">
-                            <p className="text-[9px] font-bold" style={{ color: 'var(--text-secondary)' }}>
-                                No account? <Link to="/register" className="text-indigo-500 font-black hover:underline">Create One</Link>
-                            </p>
-                        </div>
                     </form>
                 )}
                 
