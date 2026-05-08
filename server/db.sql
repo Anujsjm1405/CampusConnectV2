@@ -21,11 +21,6 @@ CREATE TABLE users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO users 
-(name, email, login_id, password, role)
-VALUES
-('Admin User', 'admin@example.com', 'admin', 'admin123', 'ADMIN');
-
 -- Classes Table (Batches)
 CREATE TABLE classes (
     id SERIAL PRIMARY KEY,

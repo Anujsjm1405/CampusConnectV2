@@ -3,9 +3,6 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const db = require('../db');
 const { requireAdmin } = require('../middleware/auth');
-//added_p
-const { sendFacultyMail } = require('../services/EmailNotify');
-//---
 const { sendFacultyMail, sendStudentMail } = require('../services/EmailNotify');
 
 // Professor Management
@@ -26,14 +23,8 @@ router.post('/professors', requireAdmin, async (req, res) => {
         });
         console.log("12356789");
         const newProf = await db.query(insertQuery, [name, email, login_id, hashedPassword, designation || 'Assistant Professor']);
-        
-        //added_P
-        await sendFacultyMail(email, name, login_id, password);
-        //---
 
         res.status(201).json(newProf.rows[0]);
-
-
     } catch (error) {
         if (error.code === '23505') {
              return res.status(409).json({ error: "Login ID already exists." });
