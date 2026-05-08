@@ -10,17 +10,17 @@ const client = new Client({
     port: process.env.DB_PORT,
 });
 
-async function resetAdmin() {
+async function resetProf() {
     try {
         await client.connect();
-        const hash = await bcrypt.hash('admin', 10);
-        await client.query('UPDATE users SET password = $1 WHERE login_id = $2', [hash, 'admin']);
-        console.log('Admin password reset successfully');
+        const hash = await bcrypt.hash('password', 10);
+        await client.query('UPDATE users SET password = $1 WHERE login_id = $2', [hash, 'VAP@WCE']);
+        console.log('Professor password reset successfully');
     } catch (err) {
-        console.error('Error resetting admin password:', err);
+        console.error('Error resetting professor password:', err);
     } finally {
         await client.end();
     }
 }
 
-resetAdmin();
+resetProf();

@@ -6,6 +6,7 @@ const { requireAdmin } = require('../middleware/auth');
 //added_p
 const { sendFacultyMail } = require('../services/EmailNotify');
 //---
+const { sendFacultyMail, sendStudentMail } = require('../services/EmailNotify');
 
 // Professor Management
 router.post('/professors', requireAdmin, async (req, res) => {
@@ -18,11 +19,18 @@ router.post('/professors', requireAdmin, async (req, res) => {
             INSERT INTO users (name, email, login_id, password, role, designation)
             VALUES ($1, $2, $3, $4, 'PROFESSOR', $5) RETURNING id, name, email, login_id, role, designation
         `;
+        
+        // Notify professor via email (non-blocking)
+        sendFacultyMail(email, name, login_id, password).catch(mailError => {
+            console.error("Failed to send faculty email:", mailError);
+        });
+        console.log("12356789");
         const newProf = await db.query(insertQuery, [name, email, login_id, hashedPassword, designation || 'Assistant Professor']);
         
         //added_P
         await sendFacultyMail(email, name, login_id, password);
         //---
+
         res.status(201).json(newProf.rows[0]);
 
 
@@ -37,7 +45,7 @@ router.post('/professors', requireAdmin, async (req, res) => {
 
 router.get('/professors', requireAdmin, async (req, res) => {
     try {
-        const result = await db.query("SELECT id, name, login_id, role, designation FROM users WHERE role = 'PROFESSOR' ORDER BY name ASC");
+        const result = await db.query("SELECT id, name, email, login_id, role, designation FROM users WHERE role = 'PROFESSOR' ORDER BY name ASC");
         res.json(result.rows);
     } catch (error) {
         res.status(500).json({ error: "Server error" });
@@ -173,7 +181,48 @@ router.post('/students', requireAdmin, async (req, res) => {
             RETURNING id, name, email, prn, class_id, batch
         `;
         const result = await db.query(query, [name, email, prn, hashedPassword, class_id, batch || null]);
+
+        // Notify student via email (non-blocking)
+        sendStudentMail(email, name, prn, password).catch(mailError => {
+            console.error("Failed to send student email:", mailError);
+        });
+
         res.status(201).json(result.rows[0]);
+    } catch (error) {
+        if (error.code === '23505') {
+            return res.status(409).json({ error: "PRN or Email already exists." });
+        }
+        console.error(error);
+        res.status(500).json({ error: "Server error" });
+    }
+});
+
+router.put('/students/:id', requireAdmin, async (req, res) => {
+    try {
+        const { name, email, prn, password, class_id, batch } = req.body;
+        let updateQuery;
+        let params;
+
+        if (password) {
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(password, salt);
+            updateQuery = `
+                UPDATE students 
+                SET name = $1, email = $2, prn = $3, password = $4, class_id = $5, batch = $6 
+                WHERE id = $7
+            `;
+            params = [name, email, prn, hashedPassword, class_id, batch, req.params.id];
+        } else {
+            updateQuery = `
+                UPDATE students 
+                SET name = $1, email = $2, prn = $3, class_id = $4, batch = $5 
+                WHERE id = $6
+            `;
+            params = [name, email, prn, class_id, batch, req.params.id];
+        }
+
+        await db.query(updateQuery, params);
+        res.json({ message: "Student profile updated successfully" });
     } catch (error) {
         if (error.code === '23505') {
             return res.status(409).json({ error: "PRN or Email already exists." });

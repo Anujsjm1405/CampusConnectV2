@@ -9,7 +9,7 @@ export const AuthProvider = ({ children }) => {
 
     // Axios configuration for sessions
     axios.defaults.withCredentials = true;
-    axios.defaults.baseURL = 'http://localhost:5000'; // Fallback if proxy fails
+    axios.defaults.baseURL = 'http://localhost:5001'; // Matches the new backend port
 
     useEffect(() => {
         const checkSession = async () => {

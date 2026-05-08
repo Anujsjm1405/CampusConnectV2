@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { ThemeContext } from '../context/ThemeContext';
 import { 
-    LogOut, Plus, Trash2, Users, Calendar, X, ChevronDown, 
+    LogOut, Plus, Trash2, Users, User, Calendar, X, ChevronDown, 
     MapPin, AlertCircle, RefreshCcw, BookOpen, Layers, 
     LayoutGrid, UserPlus, ClipboardList, Settings, Search,
-    Filter, Clock, Sun, Moon, GraduationCap, Info
+    Filter, Clock, Sun, Moon, GraduationCap, Info, Menu
 } from 'lucide-react';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -24,16 +24,29 @@ const AdminDashboard = () => {
     const { logout } = useContext(AuthContext);
     const { theme, toggleTheme } = useContext(ThemeContext);
     const [currentTime, setCurrentTime] = useState(new Date());
-    const [activeTab, setActiveTab] = useState('timetable'); // 'timetable' | 'professors' | 'mapping'
+    const [activeTab, setActiveTab] = useState('master'); // 'master' | 'timetable' | 'professors' | 'mapping' | 'locations' | 'students'
     const [mappingTab, setMappingTab] = useState('LECTURE'); // 'LECTURE' | 'LAB'
     const [selectedDay, setSelectedDay] = useState(new Date().getDay() > 0 && new Date().getDay() < 6 ? new Date().getDay() - 1 : 0);
     const [showMenu, setShowMenu] = useState(false);
+    const menuRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (menuRef.current && !menuRef.current.contains(event.target)) {
+                setShowMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
     
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
-    
+
+    const [isRegisteringProf, setIsRegisteringProf] = useState(false);
+    const [isPromoting, setIsPromoting] = useState(false);
     const [professors, setProfessors] = useState([]);
     const [timetable, setTimetable] = useState([]);
     const [masterTimetable, setMasterTimetable] = useState([]);
@@ -78,6 +91,7 @@ const AdminDashboard = () => {
         session_type: 'LECTURE' 
     });
     const [showStudentModal, setShowStudentModal] = useState(false);
+    const [editStudentId, setEditStudentId] = useState(null);
     const [studentForm, setStudentForm] = useState({ 
         name: '', email: '', prn: '', password: '', class_id: '', batch: '' 
     });
@@ -85,12 +99,32 @@ const AdminDashboard = () => {
     // Computed
     const [classAssignments, setClassAssignments] = useState([]);
     const [classAssignmentsForMaster, setClassAssignmentsForMaster] = useState([]);
+    
+    useEffect(() => {
+        const anyModalOpen = showProfModal || showSlotModal || showDeleteModal || 
+                           showResetModal || showAssignModal || showResetMappingModal || 
+                           showLocationModal || showStudentModal || showBatchPromoteModal;
+        if (anyModalOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'auto';
+        }
+    }, [showProfModal, showSlotModal, showDeleteModal, showResetModal, showAssignModal, showResetMappingModal, showLocationModal, showStudentModal, showBatchPromoteModal]);
 
     useEffect(() => {
         fetchInitialData();
     }, []);
 
+    // Sync selectedDivision when selectedYear changes
     useEffect(() => {
+        const availableDivisions = [...new Set(allClasses.filter(c => c.year === selectedYear).map(c => c.division))];
+        if (selectedDivision && !availableDivisions.includes(selectedDivision) && availableDivisions.length > 0) {
+            setSelectedDivision(availableDivisions[0]);
+        }
+    }, [selectedYear, allClasses]);
+
+    useEffect(() => {
+        if (!Array.isArray(allClasses)) return;
         const cls = allClasses.find(c => c.year === selectedYear && c.division === selectedDivision);
         if (cls) {
             setSelectedClassId(cls.id);
@@ -109,6 +143,15 @@ const AdminDashboard = () => {
         }
     }, [selectedClassId]);
 
+    const fetchStudents = async () => {
+        try {
+            const res = await axios.get('/api/admin/students');
+            setStudents(res.data);
+        } catch (err) {
+            console.error("Error fetching students:", err);
+        }
+    };
+
     const fetchInitialData = async () => {
         try {
             const [profsRes, classesRes, assignRes, locsRes] = await Promise.all([
@@ -121,17 +164,9 @@ const AdminDashboard = () => {
             setAllClasses(classesRes.data);
             setAssignments(assignRes.data);
             setLocations(locsRes.data);
+            fetchStudents();
         } catch (err) {
             console.error("Error fetching initial data:", err);
-        }
-    };
-
-    const fetchStudents = async () => {
-        try {
-            const res = await axios.get('/api/admin/students');
-            setStudents(res.data);
-        } catch (err) {
-            console.error("Error fetching students:", err);
         }
     };
 
@@ -195,14 +230,33 @@ const AdminDashboard = () => {
 
     // --- Actions ---
     const handleCreateProf = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
+        if (isRegisteringProf) return;
+        
+        // Manual Validation
+        if (!newProf.name || !newProf.login_id || !newProf.email || !newProf.password) {
+            alert(`Incomplete Form! Please provide: ${!newProf.name ? 'Full Name, ' : ''}${!newProf.login_id ? 'Login ID, ' : ''}${!newProf.email ? 'Email ID, ' : ''}${!newProf.password ? 'Password' : ''}`);
+            return;
+        }
+
+        // Debug Alert (Temporary)
+        // alert('Submitting: ' + JSON.stringify(newProf));
+
+        setIsRegisteringProf(true);
         try {
-            await axios.post('/api/admin/professors', newProf);
+            const response = await axios.post('/api/admin/professors', newProf);
+            console.log("Registration response:", response.data);
+            
             setShowProfModal(false);
             setNewProf({ name: '', email: '', login_id: '', password: '', designation: 'Assistant Professor' });
+            alert('Faculty member registered successfully!');
             fetchInitialData();
         } catch (err) {
-            alert(err.response?.data?.error || 'Failed to create professor');
+            console.error("Registration error:", err);
+            const errorMsg = err.response?.data?.error || err.message || 'Unknown error occurred';
+            alert('Error: ' + errorMsg);
+        } finally {
+            setIsRegisteringProf(false);
         }
     };
 
@@ -301,13 +355,32 @@ const AdminDashboard = () => {
     const handleAddStudent = async (e) => {
         e.preventDefault();
         try {
-            await axios.post('/api/admin/students', studentForm);
+            if (editStudentId) {
+                await axios.put(`/api/admin/students/${editStudentId}`, studentForm);
+            } else {
+                await axios.post('/api/admin/students', studentForm);
+            }
             setShowStudentModal(false);
+            setEditStudentId(null);
             setStudentForm({ name: '', email: '', prn: '', password: '', class_id: '', batch: '' });
             fetchStudents();
         } catch (err) {
-            alert(err.response?.data?.error || 'Failed to register student');
+            alert(err.response?.data?.error || 'Failed to save student profile');
         }
+    };
+
+    const handleEditStudent = (student) => {
+        const cls = allClasses.find(c => c.year === student.year && c.division === student.division);
+        setEditStudentId(student.id);
+        setStudentForm({
+            name: student.name,
+            email: student.email || '',
+            prn: student.prn,
+            password: '', // Keep empty for security unless changing
+            class_id: cls ? cls.id : '',
+            batch: student.batch || ''
+        });
+        setShowStudentModal(true);
     };
 
     const handleDeleteStudent = async (id) => {
@@ -398,6 +471,10 @@ const AdminDashboard = () => {
 
 
     const handleBatchPromote = async () => {
+        if (isPromoting) return;
+        if (!confirm('This will promote all SY/TY students and PERMANENTLY DELETE graduating B.Tech students. Proceed?')) return;
+        
+        setIsPromoting(true);
         try {
             const res = await axios.post('/api/admin/promote-students');
             const { promoted, graduated } = res.data.details || {};
@@ -406,8 +483,25 @@ const AdminDashboard = () => {
             fetchStudents();
         } catch (err) {
             alert(err.response?.data?.error || 'Failed to promote students');
+        } finally {
+            setIsPromoting(false);
         }
     };
+
+    const renderStatusBadge = () => (
+        <div className="flex items-center gap-3 bg-black/5 dark:bg-white/5 px-4 py-2 rounded-2xl border-2 border-black/20 dark:border-white/20 backdrop-blur-md">
+            <div className={`w-2 h-2 rounded-full animate-pulse ${currentTime.getDay() >= 1 && currentTime.getDay() <= 5 && currentTime.getHours() >= 9 && currentTime.getHours() < 18 ? 'bg-emerald-500' : 'bg-slate-500'}`}></div>
+            <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-primary)' }}>
+                {currentTime.getDay() >= 1 && currentTime.getDay() <= 5 && currentTime.getHours() >= 9 && currentTime.getHours() < 18 ? 'Active' : 'Inactive'}
+            </span>
+            <div className="w-px h-3 bg-black/20 dark:bg-white/20 mx-1"></div>
+            <span className="text-sm font-black tracking-tighter" style={{ color: 'var(--text-primary)' }}>
+                {currentTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                <span className="mx-2 opacity-20">|</span>
+                {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+            </span>
+        </div>
+    );
 
     const YEAR_COLORS = {
         'SY': '#3b82f6',
@@ -415,6 +509,8 @@ const AdminDashboard = () => {
         'B.Tech': '#8b5cf6',
         'FY M.Tech': '#ec4899',
     };
+
+
 
     const getEntriesAt = (dayIndex, slotIndex) => {
         return timetable.filter(e => e.day_of_week === dayIndex + 1 && 
@@ -439,79 +535,68 @@ const AdminDashboard = () => {
         });
     };
 
-    const years = [...new Set(allClasses.map(c => c.year))];
-    const divisions = [...new Set(allClasses.filter(c => c.year === selectedYear).map(c => c.division))];
+    const years = Array.isArray(allClasses) ? [...new Set(allClasses.map(c => c.year))] : [];
+    const divisions = Array.isArray(allClasses) ? [...new Set(allClasses.filter(c => c.year === selectedYear).map(c => c.division))] : [];
 
     return (
         <div className="min-h-screen pb-20 font-sans transition-colors duration-300" style={{ backgroundColor: 'var(--bg-main)', color: 'var(--text-primary)' }}>
             {/* Nav Bar */}
-            <header className="border-b px-4 md:px-6 py-3 md:py-4 sticky top-0 z-40 shadow-sm flex justify-between items-center backdrop-blur-md transition-colors duration-300" style={{ backgroundColor: 'var(--bg-header)', borderColor: 'var(--border-primary)' }}>
-                <div className="flex items-center gap-3 md:gap-6">
-                    <div className="flex items-center gap-2 md:gap-3">
-                        <div className="w-9 h-9 md:w-10 md:h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-lg md:text-xl shadow-lg shadow-indigo-100">C</div>
-                        <h1 className="text-lg md:text-xl font-black tracking-tight hidden sm:block" style={{ color: 'var(--text-primary)' }}>CampusConnect Admin</h1>
-                    </div>
-                    
-                    <div className="h-8 w-px hidden lg:block" style={{ backgroundColor: 'var(--border-primary)' }}></div>
-                    
-                    <div className="hidden lg:flex flex-col">
-                        <div className="flex items-center gap-2 font-black text-[10px] uppercase tracking-widest" style={{ color: 'var(--accent-primary)' }}>
-                            <Clock size={12} />
-                            <span>Live System Time</span>
-                        </div>
-                        <div className="font-black text-xs" style={{ color: 'var(--text-primary)' }}>
-                            {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-                            <span className="mx-2" style={{ color: 'var(--text-secondary)', opacity: 0.3 }}>|</span>
-                            <span style={{ color: 'var(--accent-primary)' }}>{currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                        </div>
+            <header className="border-b-2 px-4 md:px-6 py-3 md:py-4 sticky top-0 z-40 shadow-md flex justify-between items-center backdrop-blur-md transition-colors duration-300 border-black/10 dark:border-white/10" style={{ backgroundColor: 'var(--bg-header)' }}>
+                <div className="flex-1 flex items-center">
+                    <img src="/assets/logo.png" alt="Logo" className="w-10 h-10 md:w-12 md:h-12 object-contain" />
+                </div>
+                <div className="flex flex-col items-center flex-1 text-center">
+                    <h2 className="text-2xl font-black tracking-tighter" style={{ color: 'var(--text-primary)' }}>
+                        Campus<span className="text-indigo-600">Connect</span>
+                    </h2>
+                    <div className="flex items-center gap-2 font-black text-[10px] uppercase tracking-[0.3em]">
+                        <span className="font-black" style={{ color: 'var(--text-primary)' }}>ADMIN</span>
                     </div>
                 </div>
-                
-                <div className="relative">
-                    <button 
-                        onClick={() => setShowMenu(!showMenu)}
-                        className="flex items-center gap-2 md:gap-3 px-4 md:px-6 py-2.5 md:py-3 rounded-xl md:rounded-2xl border font-black text-[10px] md:text-xs uppercase tracking-widest transition-all hover:bg-black/5"
-                        style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
-                    >
-                        <LayoutGrid size={16} className="text-indigo-600 md:w-[18px] md:h-[18px]" />
-                        <span>Menu</span>
-                        <ChevronDown size={14} className={`transition-transform duration-300 md:w-4 md:h-4 ${showMenu ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {showMenu && (
-                        <div className="absolute top-full mt-2 left-0 w-64 rounded-[2.5rem] p-3 z-[100] animate-in slide-in-from-top-2 duration-200 glass-panel shadow-2xl" style={{ backgroundColor: theme === 'light' ? 'rgba(255, 255, 255, 0.98)' : 'rgba(20, 20, 20, 0.98)' }}>
-                            {[
-                                { id: 'master', label: 'Master Timetable', icon: LayoutGrid },
-                                { id: 'timetable', label: 'Class Timetable', icon: Calendar },
-                                { id: 'professors', label: 'Professors', icon: Users },
-                                { id: 'mapping', label: 'Faculty Mapping', icon: ClipboardList },
-                                { id: 'locations', label: 'Classrooms & Labs', icon: MapPin },
-                                { id: 'students', label: 'Students & Promotion', icon: GraduationCap },
-                            ].map(tab => (
-                                <button 
-                                    key={tab.id}
-                                    onClick={() => { setActiveTab(tab.id); setShowMenu(false); }}
-                                    className="w-full flex items-center gap-4 px-6 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all text-left hover:bg-black/5"
-                                    style={{ 
-                                        color: activeTab === tab.id ? 'var(--accent-primary)' : 'var(--text-secondary)'
-                                    }}
-                                >
-                                    <tab.icon size={18} />
-                                    {tab.label}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 md:gap-3 flex-1 justify-end">
                     <button 
                         onClick={toggleTheme}
-                        className="p-2.5 rounded-xl active:scale-95 glass-panel"
+                        className="p-2 md:p-3 rounded-xl active:scale-95 glass-panel"
                         style={{ color: 'var(--text-secondary)' }}
                     >
-                        {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+                        {theme === 'light' ? <Moon size={20} className="md:w-5 md:h-5" /> : <Sun size={20} className="md:w-5 md:h-5" />}
                     </button>
+                    
+                    <div className="relative" ref={menuRef}>
+                        <button 
+                            onClick={() => setShowMenu(!showMenu)}
+                            className="p-2.5 md:p-3 rounded-xl md:rounded-2xl border transition-all hover:bg-black/5"
+                            style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+                        >
+                            <Menu size={20} className="text-indigo-600 md:w-6 md:h-6" />
+                        </button>
+
+                        {showMenu && (
+                            <div className="absolute top-full mt-2 right-0 w-64 rounded-[2.5rem] p-3 z-[100] animate-in slide-in-from-top-2 duration-200 glass-panel shadow-2xl" style={{ backgroundColor: theme === 'light' ? 'rgba(255, 255, 255, 0.98)' : 'rgba(20, 20, 20, 0.98)' }}>
+                                {[
+                                    { id: 'master', label: 'Master Timetable', icon: LayoutGrid },
+                                    { id: 'timetable', label: 'Class Timetable', icon: Calendar },
+                                    { id: 'professors', label: 'Professors', icon: Users },
+                                    { id: 'mapping', label: 'Faculty Mapping', icon: ClipboardList },
+                                    { id: 'locations', label: 'Classrooms & Labs', icon: MapPin },
+                                    { id: 'students', label: 'Students & Promotion', icon: GraduationCap },
+                                ].map(tab => (
+                                    <button 
+                                        key={tab.id}
+                                        onClick={() => { setActiveTab(tab.id); setShowMenu(false); }}
+                                        className="w-full flex items-center gap-4 px-6 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all text-left hover:bg-black/5"
+                                        style={{ 
+                                            color: activeTab === tab.id ? 'var(--accent-primary)' : 'var(--text-secondary)'
+                                        }}
+                                    >
+                                        <tab.icon size={18} />
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
                     <button 
                         onClick={logout}
                         className="p-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all active:scale-95 dark:bg-red-900/20 dark:text-red-400"
@@ -520,6 +605,8 @@ const AdminDashboard = () => {
                     </button>
                 </div>
             </header>
+
+
 
             {/* Selection Bar (Shared for Timetable & Mapping) */}
             {(activeTab === 'timetable' || activeTab === 'mapping' || activeTab === 'students') && (
@@ -574,7 +661,10 @@ const AdminDashboard = () => {
                     <div className="space-y-8">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                             <div className="space-y-1">
-                                <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Master Campus Schedule</h2>
+                                <div className="flex flex-wrap items-center gap-4 md:gap-6">
+                                    <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Master Timetable</h2>
+                                    {renderStatusBadge()}
+                                </div>
                                 <p className="font-bold uppercase tracking-widest text-[10px] md:text-xs" style={{ color: 'var(--text-secondary)' }}>Unified view of all classes and faculty assignments</p>
                                 
                                 <div className="flex flex-wrap items-center gap-3 mt-4 pt-2">
@@ -600,7 +690,7 @@ const AdminDashboard = () => {
                                         onChange={e => setMasterFilterProf(e.target.value)}
                                     >
                                         <option value="">All Faculty</option>
-                                        {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                        {Array.isArray(professors) && professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                     </select>
                                 </div>
                                 <button 
@@ -681,7 +771,10 @@ const AdminDashboard = () => {
                     <div className="space-y-8">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                             <div className="space-y-1">
-                                <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Master Schedule</h2>
+                                <div className="flex flex-wrap items-center gap-4 md:gap-6">
+                                    <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Class Timetable</h2>
+                                    {renderStatusBadge()}
+                                </div>
                                 <p className="font-bold uppercase tracking-widest text-[10px] md:text-xs" style={{ color: 'var(--text-secondary)' }}>Allocating slots for {selectedYear} {selectedDivision}</p>
                             </div>
                             <div className="flex gap-2 w-full md:w-auto">
@@ -874,7 +967,10 @@ const AdminDashboard = () => {
                     <div className="space-y-8">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                             <div className="space-y-1">
-                                <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Professor Registry</h2>
+                                <div className="flex flex-wrap items-center gap-4 md:gap-6">
+                                    <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Professor Registry</h2>
+                                    {renderStatusBadge()}
+                                </div>
                                 <p className="font-bold uppercase tracking-widest text-[10px] md:text-xs" style={{ color: 'var(--text-secondary)' }}>Manage all registered faculty members</p>
                             </div>
                             <button 
@@ -900,11 +996,11 @@ const AdminDashboard = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y" style={{ divideColor: 'var(--border-primary)' }}>
-                                        {professors.map(p => (
+                                        {Array.isArray(professors) && professors.map(p => (
                                             <tr key={p.id} className="hover:bg-black/5 transition-colors group">
                                                 <td className="px-8 py-6">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black" style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent-primary)' }}>{p.name[0]}</div>
+                                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black" style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent-primary)' }}>{p.name?.[0] || '?'}</div>
                                                         <div className="font-black" style={{ color: 'var(--text-primary)' }}>{p.name}</div>
                                                     </div>
                                                 </td>
@@ -939,10 +1035,10 @@ const AdminDashboard = () => {
 
                             {/* Mobile Cards */}
                             <div className="md:hidden divide-y" style={{ borderColor: 'var(--border-primary)' }}>
-                                {professors.map(p => (
+                                {Array.isArray(professors) && professors.map(p => (
                                     <div key={p.id} className="p-4 flex items-center justify-between gap-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black shrink-0" style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent-primary)' }}>{p.name[0]}</div>
+                                            <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black shrink-0" style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent-primary)' }}>{p.name?.[0] || '?'}</div>
                                             <div>
                                                 <div className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{p.name}</div>
                                                 <div className="text-[10px] font-bold" style={{ color: 'var(--text-secondary)' }}>{p.designation} • ID: {p.login_id}</div>
@@ -971,7 +1067,10 @@ const AdminDashboard = () => {
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 md:gap-8">
                             <div className="space-y-4 w-full md:w-auto">
                                 <div className="space-y-1">
-                                    <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Faculty Mapping</h2>
+                                    <div className="flex flex-wrap items-center gap-4 md:gap-6">
+                                        <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Faculty Mapping</h2>
+                                        {renderStatusBadge()}
+                                    </div>
                                     <p className="font-bold uppercase tracking-widest text-[10px] md:text-xs" style={{ color: 'var(--text-secondary)' }}>Course allotment for {selectedYear} {selectedDivision}</p>
                                 </div>
                                 
@@ -1012,7 +1111,7 @@ const AdminDashboard = () => {
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                             {classAssignments
-                                .filter(ass => ass.session_type === mappingTab)
+                                .filter(ass => ass?.session_type === mappingTab)
                                 .map(ass => (
                                 <div key={ass.id} className="p-4 md:p-6 rounded-2xl md:rounded-[2rem]  group hover:border-indigo-400 transition-all relative overflow-hidden glass-panel">
                                      <div className="absolute top-0 right-0 w-24 h-24 opacity-5 rounded-full -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-500" style={{ backgroundColor: 'var(--accent-primary)' }}></div>
@@ -1036,7 +1135,7 @@ const AdminDashboard = () => {
                                              <div className="flex items-center gap-2 mt-1">
                                                  <p className="text-[10px] md:text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>{ass.professor_name}</p>
                                                  <span className={`text-[7px] md:text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter ${
-                                                     ass.session_type === 'LAB' ? 'bg-amber-100 text-amber-600' : 
+                                                     ass.session_type === 'LAB' ? 'bg-purple-100 text-purple-600' : 
                                                      ass.session_type === 'LECTURE' ? 'bg-indigo-100 text-indigo-600' : 
                                                      'bg-emerald-100 text-emerald-600'
                                                  }`}>
@@ -1060,7 +1159,10 @@ const AdminDashboard = () => {
                     <div className="space-y-8 relative z-10">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 relative z-20">
                             <div className="space-y-1">
-                                <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Student Directory</h2>
+                                <div className="flex flex-wrap items-center gap-4 md:gap-6">
+                                    <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Student Directory</h2>
+                                    {renderStatusBadge()}
+                                </div>
                                 <p className="font-bold uppercase tracking-widest text-[10px] md:text-xs" style={{ color: 'var(--text-secondary)' }}>Manage student profiles and academic transitions</p>
                             </div>
                             <div className="flex flex-col md:flex-row gap-2">
@@ -1094,11 +1196,13 @@ const AdminDashboard = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y" style={{ divideColor: 'var(--border-primary)' }}>
-                                        {students.filter(s => s.year === selectedYear && s.division === selectedDivision).map(s => (
+                                        {Array.isArray(students) && students.filter(s => s?.year === selectedYear && s?.division === selectedDivision).map(s => (
                                             <tr key={s.id} className="hover:bg-black/5 transition-colors">
                                                 <td className="px-8 py-6">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black" style={{ backgroundColor: 'var(--bg-main)', color: 'var(--accent-primary)', border: '1px solid var(--border-primary)' }}>{s.name[0]}</div>
+                                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black" style={{ backgroundColor: 'var(--bg-main)', color: 'var(--accent-primary)', border: '1px solid var(--border-primary)' }}>
+                                                            <User size={18} />
+                                                        </div>
                                                         <div className="font-black" style={{ color: 'var(--text-primary)' }}>{s.name}</div>
                                                     </div>
                                                 </td>
@@ -1111,20 +1215,28 @@ const AdminDashboard = () => {
                                                         {s.status}
                                                     </span>
                                                 </td>
-                                                <td className="px-8 py-6 text-right">
-                                                    <button 
-                                                        onClick={() => handleDeleteStudent(s.id)}
-                                                        className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
+                                                <td className="px-8 py-6">
+                                                    <div className="flex justify-end gap-2">
+                                                        <button 
+                                                            onClick={() => handleEditStudent(s)}
+                                                            className="p-2 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-all"
+                                                        >
+                                                            <Settings size={16} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleDeleteStudent(s.id)}
+                                                            className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
                                     </tbody>
                                 </table>
                             </div>
-                            {students.filter(s => s.year === selectedYear && s.division === selectedDivision).length === 0 && (
+                            {Array.isArray(students) && students.filter(s => s?.year === selectedYear && s?.division === selectedDivision).length === 0 && (
                                 <div className="px-8 py-20 text-center font-bold" style={{ color: 'var(--text-secondary)' }}>No students registered for this class yet.</div>
                             )}
                         </div>
@@ -1136,7 +1248,10 @@ const AdminDashboard = () => {
                     <div className="space-y-8">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                             <div className="space-y-1">
-                                <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Department Resources</h2>
+                                <div className="flex flex-wrap items-center gap-4 md:gap-6">
+                                    <h2 className="text-2xl md:text-4xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Department Resources</h2>
+                                    {renderStatusBadge()}
+                                </div>
                                 <p className="font-bold uppercase tracking-widest text-[10px] md:text-xs" style={{ color: 'var(--text-secondary)' }}>Manage all allocated classrooms and specialized labs</p>
                             </div>
                             <div className="flex gap-2 p-1.5 rounded-2xl border" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
@@ -1177,7 +1292,7 @@ const AdminDashboard = () => {
                                     </thead>
                                     <tbody className="divide-y" style={{ divideColor: 'var(--border-primary)' }}>
                                         {locationTab === 'CLASSROOM' ? (
-                                            locations.filter(l => l.type === 'CLASSROOM').map(classroom => (
+                                            Array.isArray(locations) && locations.filter(l => l?.type === 'CLASSROOM').map(classroom => (
                                                 <tr key={classroom.id} className="hover:bg-black/5 transition-colors group">
                                                     <td className="px-8 py-6">
                                                         <div className="flex items-center gap-3">
@@ -1218,7 +1333,7 @@ const AdminDashboard = () => {
                                             ))
                                         ) : (
                                             (() => {
-                                                const labLocations = locations.filter(l => l.type === 'LAB');
+                                                const labLocations = Array.isArray(locations) ? locations.filter(l => l?.type === 'LAB') : [];
                                                 const parents = labLocations.filter(l => !l.parent_id);
                                                 const orphans = labLocations.filter(l => l.parent_id && !parents.some(p => p.id === l.parent_id));
                                                 
@@ -1280,7 +1395,7 @@ const AdminDashboard = () => {
                                                                         </div>
                                                                     </td>
                                                                     <td className="px-8 py-5">
-                                                                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest bg-amber-100 text-amber-600`}>
+                                                                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest bg-purple-100 text-purple-600`}>
                                                                             {child.type}
                                                                         </span>
                                                                     </td>
@@ -1324,244 +1439,98 @@ const AdminDashboard = () => {
             
             {/* Professor Registration Modal */}
             {showProfModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                    <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden animate-in fade-in zoom-in duration-300 glass-panel">
-                        <div className="px-6 md:px-10 py-6 md:py-8 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
-                            <h3 className="font-black text-xl md:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Register Faculty</h3>
-                            <button onClick={() => setShowProfModal(false)} className="p-2 rounded-2xl hover:opacity-70 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={20} className="md:w-6 md:h-6" /></button>
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+                    <div className="w-full max-w-2xl max-h-[95vh] flex flex-col rounded-[2.5rem] md:rounded-[3.5rem] overflow-hidden animate-in fade-in zoom-in duration-500 shadow-2xl" style={{ backgroundColor: theme === 'light' ? '#ffffff' : '#1a1a1a' }}>
+                        <div className="px-8 md:px-12 py-8 md:py-10 border-b flex justify-between items-center shrink-0" style={{ backgroundColor: theme === 'light' ? '#ffffff' : '#1a1a1a', borderColor: 'var(--border-primary)' }}>
+                            <h3 className="font-black text-2xl md:text-3xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Register Faculty</h3>
+                            <button onClick={() => setShowProfModal(false)} className="p-3 rounded-3xl hover:bg-black/5 dark:hover:bg-white/5 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={24} /></button>
                         </div>
-                        <form onSubmit={handleCreateProf} className="p-6 md:p-10 space-y-4 md:space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Full Legal Name</label>
-                                <input required className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="Dr. John Smith" value={newProf.name} onChange={e => setNewProf({...newProf, name: e.target.value})} />
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-8 md:p-12">
+                            <div className="space-y-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Full Legal Name</label>
+                                        <input className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-indigo-500 font-bold text-sm md:text-base shadow-sm" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="Dr. John Smith" value={newProf.name} onChange={e => setNewProf({...newProf, name: e.target.value})} />
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Login ID</label>
+                                        <input className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-indigo-500 font-bold text-sm md:text-base shadow-sm" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="smith_j" value={newProf.login_id} onChange={e => setNewProf({...newProf, login_id: e.target.value})} />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Email ID</label>
+                                        <input type="email" className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-indigo-500 font-bold text-sm md:text-base shadow-sm" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="smith@college.edu" value={newProf.email} onChange={e => setNewProf({...newProf, email: e.target.value})} />
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Designation</label>
+                                        <select className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer text-sm md:text-base shadow-sm" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={newProf.designation} onChange={e => setNewProf({...newProf, designation: e.target.value})}>
+                                            {['Professor', 'Associate Professor', 'Assistant Professor', 'HOD'].map(d => (
+                                                <option key={d} value={d}>{d}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Security Password</label>
+                                    <input type="password" className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-indigo-500 font-bold text-sm md:text-base shadow-sm" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="••••••••" value={newProf.password} onChange={e => setNewProf({...newProf, password: e.target.value})} />
+                                </div>
+                                <div className="pt-6">
+                                    <button 
+                                        onClick={handleCreateProf}
+                                        disabled={isRegisteringProf}
+                                        className="w-full text-white py-5 md:py-6 rounded-2xl md:rounded-[2.5rem] font-black text-lg md:text-xl hover:opacity-90 transition-all shadow-2xl transform active:scale-[0.98] disabled:opacity-50" 
+                                        style={{ backgroundColor: 'var(--accent-primary)' }}
+                                    >
+                                        {isRegisteringProf ? 'Registering...' : 'Confirm Registration'}
+                                    </button>
+                                </div>
                             </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Login ID</label>
-                                <input required className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="smith_j" value={newProf.login_id} onChange={e => setNewProf({...newProf, login_id: e.target.value})} />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Email ID</label>
-                                <input required type="email" className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="smith@college.edu" value={newProf.email} onChange={e => setNewProf({...newProf, email: e.target.value})} />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Designation</label>
-                                <select 
-                                    required 
-                                    className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base appearance-none cursor-pointer" 
-                                    style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
-                                    value={newProf.designation} 
-                                    onChange={e => setNewProf({...newProf, designation: e.target.value})}
-                                >
-                                    {['HOD', 'Professor', 'Associate Professor', 'Assistant Professor'].map(d => (
-                                        <option key={d} value={d}>{d}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Set Password</label>
-                                <input required type="password" className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="••••••••" value={newProf.password} onChange={e => setNewProf({...newProf, password: e.target.value})} />
-                            </div>
-                            <button className="w-full text-white py-4 md:py-5 rounded-xl md:rounded-2xl font-black text-base md:text-lg hover:opacity-90 transition-all shadow-2xl mt-2 md:mt-4" style={{ backgroundColor: 'var(--accent-primary)' }}>Confirm Registration</button>
-                        </form>
+                        </div>
                     </div>
                 </div>
             )}
 
             {/* Assignment Mapping Modal */}
             {showAssignModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                    <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden animate-in fade-in zoom-in duration-300 glass-panel">
-                        <div className="px-6 md:px-10 py-6 md:py-8 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="w-full max-w-2xl max-h-[95vh] flex flex-col rounded-[2.5rem] md:rounded-[3.5rem] overflow-hidden animate-in fade-in zoom-in duration-500 shadow-2xl" style={{ backgroundColor: theme === 'light' ? '#ffffff' : '#1a1a1a' }}>
+                        <div className="px-8 md:px-12 py-8 md:py-10 border-b flex justify-between items-center shrink-0" style={{ backgroundColor: theme === 'light' ? '#ffffff' : '#1a1a1a', borderColor: 'var(--border-primary)' }}>
                             <div>
-                                <h3 className="font-black text-xl md:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Faculty Allotment</h3>
-                                <p className="text-[9px] md:text-[10px] font-black uppercase tracking-widest mt-1" style={{ color: 'var(--accent-primary)' }}>For {selectedYear} - {selectedDivision}</p>
+                                <h3 className="font-black text-2xl md:text-3xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Faculty Allotment</h3>
+                                <p className="text-[11px] font-black uppercase tracking-[0.2em] mt-3" style={{ color: 'var(--accent-primary)' }}>For {selectedYear} - {selectedDivision}</p>
                             </div>
-                            <button onClick={() => setShowAssignModal(false)} className="p-2 rounded-2xl hover:opacity-70 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={20} className="md:w-6 md:h-6" /></button>
+                            <button onClick={() => setShowAssignModal(false)} className="p-3 rounded-3xl hover:bg-black/5 dark:hover:bg-white/5 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={24} /></button>
                         </div>
-                        <form onSubmit={handleAddAssignment} className="p-6 md:p-10 space-y-4 md:space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Assign Professor</label>
-                                <select required className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={assignmentForm.professor_id} onChange={e => setAssignmentForm({...assignmentForm, professor_id: e.target.value})}>
-                                    <option value="">Select Faculty</option>
-                                    {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                </select>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Subject Name</label>
-                                <input required className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="e.g. Data Structures" value={assignmentForm.subject_name} onChange={e => setAssignmentForm({...assignmentForm, subject_name: e.target.value})} />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Mapping Format</label>
-                                <div className="flex gap-2">
-                                    {['LECTURE', 'LAB', 'BOTH'].map(type => (
-                                        <button 
-                                            key={type} 
-                                            type="button"
-                                            onClick={() => setAssignmentForm(prev => ({...prev, session_type: type}))}
-                                            className={`flex-1 py-3 px-1.5 rounded-lg md:rounded-xl border-4 font-black transition-all text-[9px] md:text-[10px] ${
-                                                assignmentForm.session_type === type 
-                                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-500/20' 
-                                                : 'border-transparent'
-                                            }`}
-                                            style={{ 
-                                                backgroundColor: assignmentForm.session_type === type ? '#4f46e5' : 'var(--bg-main)',
-                                                color: assignmentForm.session_type === type ? '#fff' : 'var(--text-secondary)'
-                                            }}
-                                        >
-                                            {type}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            <button className="w-full text-white py-4 md:py-5 rounded-xl md:rounded-2xl font-black text-base md:text-lg hover:opacity-90 transition-all shadow-2xl mt-2 md:mt-4" style={{ backgroundColor: 'var(--accent-primary)' }}>Confirm Mapping</button>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* Location Registration Modal */}
-            {showLocationModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                    <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden animate-in fade-in zoom-in duration-300 glass-panel">
-                        <div className="px-6 md:px-10 py-6 md:py-8 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
-                            <h3 className="font-black text-xl md:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>{editLocationId ? 'Edit Resource' : 'Register Resource'}</h3>
-                            <button onClick={() => setShowLocationModal(false)} className="p-2 rounded-2xl hover:opacity-70 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={20} className="md:w-6 md:h-6" /></button>
-                        </div>
-                        <form onSubmit={handleLocationSubmit} className="p-6 md:p-10 space-y-4 md:space-y-6">
-                            {newLocation.type === 'LAB' && (
-                                <div className="flex gap-4 p-4 rounded-2xl border-2 mb-4" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
-                                    <label className="flex items-center gap-3 cursor-pointer flex-1 group">
-                                        <input 
-                                            type="checkbox" 
-                                            className="w-5 h-5 rounded-lg border-2 accent-indigo-600 cursor-pointer"
-                                            checked={!newLocation.parent_name || newLocation.parent_name === newLocation.name}
-                                            onChange={(e) => {
-                                                if (e.target.checked) {
-                                                    setNewLocation({...newLocation, parent_name: newLocation.name});
-                                                } else {
-                                                    setNewLocation({...newLocation, parent_name: ''});
-                                                }
-                                            }}
-                                        />
-                                        <span className="text-[11px] font-black uppercase tracking-widest text-indigo-500 group-hover:text-indigo-600 transition-colors">Register as Main Lab</span>
-                                    </label>
-                                </div>
-                            )}
-
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Resource Name</label>
-                                <input 
-                                    required 
-                                    className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" 
-                                    style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
-                                    placeholder={newLocation.type === 'LAB' ? "e.g. Computer Lab 1" : "e.g. Room 302"} 
-                                    value={newLocation.name} 
-                                    onChange={e => {
-                                        const isMain = !newLocation.parent_name || newLocation.parent_name === newLocation.name;
-                                        setNewLocation({
-                                            ...newLocation, 
-                                            name: e.target.value,
-                                            parent_name: isMain ? e.target.value : newLocation.parent_name
-                                        });
-                                    }} 
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Capacity (Student Count)</label>
-                                <input type="number" className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="60" value={newLocation.capacity} onChange={e => setNewLocation({...newLocation, capacity: e.target.value})} />
-                            </div>
-                            {newLocation.type === 'LAB' && (!newLocation.parent_name || newLocation.parent_name !== newLocation.name) && (
-                                <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
-                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Parent Lab (Mandatory)</label>
-                                    <div className="relative">
-                                        <input 
-                                            required 
-                                            list="parent-labs"
-                                            className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" 
-                                            style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
-                                            placeholder="Select or type Parent Lab"
-                                            value={newLocation.parent_name} 
-                                            onChange={e => setNewLocation({...newLocation, parent_name: e.target.value})}
-                                        />
-                                        <datalist id="parent-labs">
-                                            {locations
-                                                .filter(l => l.type === 'LAB' && !l.parent_id && l.id !== editLocationId)
-                                                .map(l => (
-                                                    <option key={l.id} value={l.name} />
-                                                ))}
-                                        </datalist>
-                                    </div>
-                                </div>
-                            )}
-                            <button className="w-full text-white py-4 md:py-5 rounded-xl md:rounded-2xl font-black text-base md:text-lg hover:opacity-90 transition-all shadow-2xl mt-2 md:mt-4" style={{ backgroundColor: 'var(--accent-primary)' }}>{editLocationId ? 'Save Changes' : 'Confirm Registration'}</button>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* Timetable Assignment Modal */}
-            {showSlotModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                    <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden animate-in fade-in zoom-in duration-300 glass-panel">
-                        <div className="px-6 md:px-10 py-6 md:py-8 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
-                            <div>
-                                <h3 className="font-black text-xl md:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Assign Slot</h3>
-                                <div className="flex items-center gap-2 mt-2">
-                                    <span className="text-[8px] md:text-[9px] font-black px-2 md:px-3 py-0.5 md:py-1 text-white rounded-full uppercase tracking-widest" style={{ backgroundColor: 'var(--accent-primary)' }}>{DAYS[activeSlot.day]}</span>
-                                    <span className="text-[10px] md:text-xs font-black" style={{ color: 'var(--text-primary)' }}>{SLOTS[activeSlot.slot].time}</span>
-                                </div>
-                            </div>
-                            <button onClick={() => setShowSlotModal(false)} className="p-2 rounded-2xl hover:opacity-70 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={20} className="md:w-6 md:h-6" /></button>
-                        </div>
-                        <form onSubmit={handleCreateEntry} className="p-6 md:p-10 space-y-4 md:space-y-6">
-                            {activeTab === 'master' && (
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Target Class</label>
-                                    <select required className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={newEntry.class_id} onChange={e => setNewEntry({...newEntry, class_id: e.target.value, assignment_id: ''})}>
-                                        <option value="">Select Class</option>
-                                        {allClasses.map(c => <option key={c.id} value={c.id}>{c.year} - {c.division}</option>)}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-8 md:p-12">
+                            <form onSubmit={handleAddAssignment} className="space-y-8">
+                                <div className="space-y-3">
+                                    <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Assign Professor</label>
+                                    <select required className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer text-sm md:text-base shadow-sm" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={assignmentForm.professor_id} onChange={e => setAssignmentForm({...assignmentForm, professor_id: e.target.value})}>
+                                        <option value="">Select Faculty Member</option>
+                                        {Array.isArray(professors) && professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                     </select>
                                 </div>
-                            )}
-
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Select Subject Mapping</label>
-                                <select 
-                                    required 
-                                    disabled={activeTab === 'master' && !newEntry.class_id}
-                                    className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer text-sm md:text-base disabled:opacity-50" 
-                                    style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
-                                    value={newEntry.assignment_id} 
-                                    onChange={e => setNewEntry({...newEntry, assignment_id: e.target.value})}
-                                >
-                                    <option value="">{activeTab === 'master' && !newEntry.class_id ? 'Pick a class first' : 'Mapped Professors'}</option>
-                                    {(activeTab === 'master' ? classAssignmentsForMaster : classAssignments)
-                                        .filter(a => {
-                                            if (newEntry.session_type === 'LECTURE') return a.session_type === 'LECTURE' || a.session_type === 'BOTH';
-                                            if (newEntry.session_type === 'LAB') return a.session_type === 'LAB' || a.session_type === 'BOTH';
-                                            return true;
-                                        })
-                                        .map(a => <option key={a.id} value={a.id}>{a.subject_name} ({a.professor_name})</option>)}
-                                </select>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Format</label>
-                                    <div className="flex gap-2">
-                                        {['LECTURE', 'LAB'].map(type => (
+                                <div className="space-y-3">
+                                    <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Subject Name</label>
+                                    <input required className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-indigo-500 font-bold text-sm md:text-base shadow-sm" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="e.g. Data Structures" value={assignmentForm.subject_name} onChange={e => setAssignmentForm({...assignmentForm, subject_name: e.target.value})} />
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Mapping Format</label>
+                                    <div className="flex gap-3">
+                                        {['LECTURE', 'LAB', 'BOTH'].map(type => (
                                             <button 
                                                 key={type} 
                                                 type="button"
-                                                onClick={() => setNewEntry({...newEntry, session_type: type})}
-                                                className={`flex-1 py-3 md:py-3.5 rounded-lg md:rounded-xl border-4 font-black transition-all text-[10px] ${
-                                                    newEntry.session_type === type 
-                                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-500/20' 
+                                                onClick={() => setAssignmentForm(prev => ({...prev, session_type: type}))}
+                                                className={`flex-1 py-4 md:py-4.5 rounded-2xl md:rounded-[2rem] border-2 font-black transition-all text-xs tracking-widest ${
+                                                    assignmentForm.session_type === type 
+                                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl shadow-indigo-500/20' 
                                                     : 'border-transparent'
                                                 }`}
                                                 style={{ 
-                                                    backgroundColor: newEntry.session_type === type ? '#4f46e5' : 'var(--bg-main)',
-                                                    color: newEntry.session_type === type ? '#fff' : 'var(--text-secondary)'
+                                                    backgroundColor: assignmentForm.session_type === type ? '#4f46e5' : 'var(--bg-main)',
+                                                    color: assignmentForm.session_type === type ? '#fff' : 'var(--text-secondary)'
                                                 }}
                                             >
                                                 {type}
@@ -1569,77 +1538,272 @@ const AdminDashboard = () => {
                                         ))}
                                     </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Batch (Opt)</label>
-                                    <input placeholder="B1" className="w-full px-4 md:px-5 py-3 md:py-3.5 border-2 rounded-lg md:rounded-xl outline-none focus:border-indigo-500 font-bold text-sm md:text-base" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={newEntry.batch} onChange={e => setNewEntry({...newEntry, batch: e.target.value.toUpperCase()})} />
+                                <div className="pt-6">
+                                    <button className="w-full text-white py-5 md:py-6 rounded-2xl md:rounded-[2.5rem] font-black text-lg md:text-xl hover:opacity-90 transition-all shadow-2xl transform active:scale-[0.98]" style={{ backgroundColor: 'var(--accent-primary)' }}>Confirm Mapping</button>
                                 </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Allot Physical Resource</label>
-                                <select 
-                                    required 
-                                    className="w-full px-5 md:px-6 py-3.5 md:py-4 border-2 rounded-xl md:rounded-2xl outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer text-sm md:text-base" 
-                                    style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
-                                    value={newEntry.location_id} 
-                                    onChange={e => setNewEntry({...newEntry, location_id: e.target.value})}
-                                >
-                                    <option value="">Select Room/Lab</option>
-                                    {locations
-                                        .sort((a, b) => {
-                                            if (newEntry.session_type === 'LAB') {
-                                                if (a.type === 'LAB' && b.type !== 'LAB') return -1;
-                                                if (a.type !== 'LAB' && b.type === 'LAB') return 1;
-                                            }
-                                            return a.name.localeCompare(b.name);
-                                        })
-                                        .map(l => (
-                                        <option key={l.id} value={l.id}>{l.name} ({l.type})</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <button 
-                                disabled={(activeTab === 'master' ? classAssignmentsForMaster.length === 0 : classAssignments.length === 0) || (newEntry.session_type === 'LAB' && activeSlot.slot === 6)}
-                                className="w-full text-white py-4 md:py-5 rounded-xl md:rounded-2xl font-black text-base md:text-lg hover:opacity-90 transition-all shadow-2xl disabled:opacity-50 mt-2 md:mt-2"
-                                style={{ backgroundColor: 'var(--accent-primary)' }}
-                            >
-                                Confirm Allotment
-                            </button>
-                        </form>
+                            </form>
+                        </div>
                     </div>
                 </div>
             )}
 
+            {/* Location Registration Modal */}
+            {showLocationModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="w-full max-w-2xl max-h-[95vh] flex flex-col rounded-[2.5rem] md:rounded-[3.5rem] overflow-hidden animate-in fade-in zoom-in duration-500 shadow-2xl" style={{ backgroundColor: theme === 'light' ? '#ffffff' : '#1a1a1a' }}>
+                        <div className="px-8 md:px-12 py-8 md:py-10 border-b flex justify-between items-center shrink-0" style={{ backgroundColor: theme === 'light' ? '#ffffff' : '#1a1a1a', borderColor: 'var(--border-primary)' }}>
+                            <h3 className="font-black text-2xl md:text-3xl tracking-tight" style={{ color: 'var(--text-primary)' }}>{editLocationId ? 'Edit Resource' : 'Register Resource'}</h3>
+                            <button onClick={() => setShowLocationModal(false)} className="p-3 rounded-3xl hover:bg-black/5 dark:hover:bg-white/5 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={24} /></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-8 md:p-12">
+                            <form onSubmit={handleLocationSubmit} className="space-y-8">
+                                {newLocation.type === 'LAB' && (
+                                    <div className="flex gap-4 p-5 rounded-[2rem] border-2 bg-indigo-50/50 dark:bg-indigo-900/10" style={{ borderColor: 'var(--border-primary)' }}>
+                                        <label className="flex items-center gap-4 cursor-pointer flex-1 group">
+                                            <input 
+                                                type="checkbox" 
+                                                className="w-6 h-6 rounded-xl border-2 accent-indigo-600 cursor-pointer shadow-sm"
+                                                checked={!newLocation.parent_name || newLocation.parent_name === newLocation.name}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) {
+                                                        setNewLocation({...newLocation, parent_name: newLocation.name});
+                                                    } else {
+                                                        setNewLocation({...newLocation, parent_name: ''});
+                                                    }
+                                                }}
+                                            />
+                                            <span className="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 group-hover:opacity-80 transition-all">Register as Main Hub</span>
+                                        </label>
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Resource Name</label>
+                                        <input 
+                                            required 
+                                            className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-indigo-500 font-bold text-sm md:text-base shadow-sm" 
+                                            style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
+                                            placeholder={newLocation.type === 'LAB' ? "e.g. Computer Lab 1" : "e.g. Room 302"} 
+                                            value={newLocation.name} 
+                                            onChange={e => {
+                                                const isMain = !newLocation.parent_name || newLocation.parent_name === newLocation.name;
+                                                setNewLocation({
+                                                    ...newLocation, 
+                                                    name: e.target.value,
+                                                    parent_name: isMain ? e.target.value : newLocation.parent_name
+                                                });
+                                            }} 
+                                        />
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Student Capacity</label>
+                                        <input type="number" className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-indigo-500 font-bold text-sm md:text-base shadow-sm" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} placeholder="60" value={newLocation.capacity} onChange={e => setNewLocation({...newLocation, capacity: e.target.value})} />
+                                    </div>
+                                </div>
+
+                                {newLocation.type === 'LAB' && (!newLocation.parent_name || newLocation.parent_name !== newLocation.name) && (
+                                    <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-500">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Parent Resource (Mandatory)</label>
+                                        <div className="relative">
+                                            <input 
+                                                required 
+                                                list="parent-labs"
+                                                className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-indigo-500 font-bold text-sm md:text-base shadow-sm" 
+                                                style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
+                                                placeholder="Select or type Parent Hub"
+                                                value={newLocation.parent_name} 
+                                                onChange={e => setNewLocation({...newLocation, parent_name: e.target.value})}
+                                            />
+                                            <datalist id="parent-labs">
+                                                {locations
+                                                    .filter(l => l.type === 'LAB' && !l.parent_id && l.id !== editLocationId)
+                                                    .map(l => (
+                                                        <option key={l.id} value={l.name} />
+                                                    ))}
+                                            </datalist>
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="pt-6">
+                                    <button className="w-full text-white py-5 md:py-6 rounded-2xl md:rounded-[2.5rem] font-black text-lg md:text-xl hover:opacity-90 transition-all shadow-2xl transform active:scale-[0.98]" style={{ backgroundColor: 'var(--accent-primary)' }}>{editLocationId ? 'Save Changes' : 'Confirm Registration'}</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+             {/* Timetable Assignment Modal */}
+             {showSlotModal && (
+                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                     <div className="w-full max-w-2xl max-h-[95vh] flex flex-col rounded-[2.5rem] md:rounded-[3.5rem] overflow-hidden animate-in fade-in zoom-in duration-500 shadow-2xl" style={{ backgroundColor: theme === 'light' ? '#ffffff' : '#1a1a1a' }}>
+                         {/* Header - Fixed at top */}
+                         <div className="px-8 md:px-12 py-8 md:py-10 border-b flex justify-between items-center shrink-0" style={{ backgroundColor: theme === 'light' ? '#ffffff' : '#1a1a1a', borderColor: 'var(--border-primary)' }}>
+                             <div>
+                                 <h3 className="font-black text-2xl md:text-3xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Assign Allotment</h3>
+                                 <div className="flex items-center gap-3 mt-3">
+                                     <span className="text-[10px] md:text-xs font-black px-3 md:px-4 py-1 md:py-1.5 text-white rounded-full uppercase tracking-widest" style={{ backgroundColor: 'var(--accent-primary)' }}>{DAYS[activeSlot.day]}</span>
+                                     <span className="text-xs md:text-sm font-black" style={{ color: 'var(--text-primary)' }}>{SLOTS[activeSlot.slot].time}</span>
+                                 </div>
+                             </div>
+                             <button onClick={() => setShowSlotModal(false)} className="p-3 rounded-3xl hover:bg-black/5 dark:hover:bg-white/5 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={24} /></button>
+                         </div>
+
+                         {/* Body - Scrollable */}
+                         <div className="flex-1 overflow-y-auto custom-scrollbar p-8 md:p-12">
+                             <form onSubmit={handleCreateEntry} className="space-y-8">
+                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                     {activeTab === 'master' && (
+                                         <div className="space-y-3">
+                                             <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Target Class</label>
+                                             <select required className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer text-sm md:text-base shadow-sm" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={newEntry.class_id} onChange={e => setNewEntry({...newEntry, class_id: e.target.value, assignment_id: ''})}>
+                                                 <option value="">Select Class</option>
+                                                 {Array.isArray(allClasses) && allClasses.map(c => <option key={c.id} value={c.id}>{c.year} - {c.division}</option>)}
+                                             </select>
+                                         </div>
+                                     )}
+
+                                     <div className="space-y-3">
+                                         <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Format</label>
+                                         <div className="flex gap-3">
+                                             {['LECTURE', 'LAB'].map(type => (
+                                                 <button 
+                                                     key={type} 
+                                                     type="button"
+                                                     onClick={() => setNewEntry({...newEntry, session_type: type})}
+                                                     className={`flex-1 py-4 md:py-4.5 rounded-2xl md:rounded-[2rem] border-2 font-black transition-all text-xs tracking-widest ${
+                                                         newEntry.session_type === type 
+                                                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl shadow-indigo-500/20' 
+                                                         : 'border-transparent'
+                                                     }`}
+                                                     style={{ 
+                                                         backgroundColor: newEntry.session_type === type ? '#4f46e5' : 'var(--bg-main)',
+                                                         color: newEntry.session_type === type ? '#fff' : 'var(--text-secondary)'
+                                                     }}
+                                                 >
+                                                     {type}
+                                                 </button>
+                                             ))}
+                                         </div>
+                                     </div>
+                                 </div>
+
+                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                     <div className="space-y-3">
+                                         <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Subject Mapping</label>
+                                         <select 
+                                             required 
+                                             disabled={activeTab === 'master' && !newEntry.class_id}
+                                             className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer text-sm md:text-base disabled:opacity-50 shadow-sm" 
+                                             style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
+                                             value={newEntry.assignment_id} 
+                                             onChange={e => setNewEntry({...newEntry, assignment_id: e.target.value})}
+                                         >
+                                             <option value="">{activeTab === 'master' && !newEntry.class_id ? 'Pick a class first' : 'Select Faculty'}</option>
+                                             {(activeTab === 'master' ? classAssignmentsForMaster : classAssignments)
+                                                 .filter(a => {
+                                                     if (newEntry.session_type === 'LECTURE') return a.session_type === 'LECTURE' || a.session_type === 'BOTH';
+                                                     if (newEntry.session_type === 'LAB') return a.session_type === 'LAB' || a.session_type === 'BOTH';
+                                                     return true;
+                                                 })
+                                                 .map(a => <option key={a.id} value={a.id}>{a.subject_name} ({a.professor_name})</option>)}
+                                         </select>
+                                     </div>
+
+                                     <div className="space-y-3">
+                                         <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Location</label>
+                                         <select 
+                                             required 
+                                             className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-indigo-500 font-bold appearance-none cursor-pointer text-sm md:text-base shadow-sm" 
+                                             style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
+                                             value={newEntry.location_id} 
+                                             onChange={e => setNewEntry({...newEntry, location_id: e.target.value})}
+                                         >
+                                             <option value="">Select {newEntry.session_type === 'LAB' ? 'Laboratory' : 'Classroom'}</option>
+                                             {locations
+                                                 .filter(l => {
+                                                     if (newEntry.session_type === 'LECTURE') return l.type === 'CLASSROOM';
+                                                     if (newEntry.session_type === 'LAB') return l.type === 'LAB';
+                                                     return true;
+                                                 })
+                                                 .sort((a, b) => a.name.localeCompare(b.name))
+                                                 .map(l => (
+                                                 <option key={l.id} value={l.id}>{l.name} ({l.type})</option>
+                                             ))}
+                                         </select>
+                                     </div>
+                                 </div>
+
+                                 {newEntry.session_type === 'LAB' && (
+                                     <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-500">
+                                         <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Batch Assignment</label>
+                                         <input placeholder="e.g. B1" required className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-indigo-500 font-bold text-sm md:text-base shadow-sm" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={newEntry.batch} onChange={e => setNewEntry({...newEntry, batch: e.target.value.toUpperCase()})} />
+                                     </div>
+                                 )}
+
+                                 <div className="pt-6">
+                                     <button 
+                                         disabled={(activeTab === 'master' ? (classAssignmentsForMaster?.length === 0) : (classAssignments?.length === 0)) || (newEntry.session_type === 'LAB' && activeSlot?.slot === 6)}
+                                         className="w-full text-white py-5 md:py-6 rounded-2xl md:rounded-[2.5rem] font-black text-lg md:text-xl hover:opacity-90 transition-all shadow-2xl disabled:opacity-50 transform active:scale-[0.98]"
+                                         style={{ backgroundColor: 'var(--accent-primary)' }}
+                                     >
+                                         Confirm Allotment
+                                     </button>
+                                 </div>
+                             </form>
+                         </div>
+                     </div>
+                 </div>
+             )}
+
             {/* Batch Promotion Modal */}
             {showBatchPromoteModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                    <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden animate-in fade-in zoom-in duration-300 glass-panel">
-                        <div className="px-6 md:px-10 py-6 md:py-8 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
-                            <h3 className="font-black text-xl md:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Global Batch Promotion</h3>
-                            <button onClick={() => setShowBatchPromoteModal(false)} className="p-2 rounded-2xl hover:opacity-70 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={20} /></button>
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="w-full max-w-xl max-h-[95vh] flex flex-col rounded-[2.5rem] md:rounded-[3.5rem] overflow-hidden animate-in fade-in zoom-in duration-500 shadow-2xl" style={{ backgroundColor: theme === 'light' ? '#ffffff' : '#1a1a1a' }}>
+                        <div className="px-8 md:px-12 py-8 md:py-10 border-b flex justify-between items-center shrink-0" style={{ backgroundColor: theme === 'light' ? '#ffffff' : '#1a1a1a', borderColor: 'var(--border-primary)' }}>
+                            <h3 className="font-black text-2xl md:text-3xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Global Batch Promotion</h3>
+                            <button onClick={() => setShowBatchPromoteModal(false)} className="p-3 rounded-3xl hover:bg-black/5 dark:hover:bg-white/5 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={24} /></button>
                         </div>
-                        <div className="p-6 md:p-10 space-y-6 text-center">
-                            <p className="font-bold text-sm" style={{ color: 'var(--text-secondary)' }}>
-                                This action will automatically:
-                            </p>
-                            <ul className="text-left text-sm font-bold space-y-2" style={{ color: 'var(--text-primary)' }}>
-                                <li className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> Promote SY students to TY</li>
-                                <li className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> Promote TY students to B.Tech</li>
-                                <li className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500"></div> Delete B.Tech & M.Tech students (Graduation)</li>
-                            </ul>
-                            <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-2xl border border-red-200 dark:border-red-800">
-                                <div className="flex gap-3 text-left">
-                                    <AlertCircle className="text-red-600 shrink-0" size={20} />
-                                    <p className="text-[10px] font-bold text-red-700 dark:text-red-400">Warning: Graduating students will be permanently deleted from the database. This cannot be undone.</p>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-8 md:p-12 space-y-8">
+                            <div className="text-center space-y-4">
+                                <p className="text-sm font-black uppercase tracking-[0.2em]" style={{ color: 'var(--text-secondary)' }}>Automated Workflow</p>
+                                <div className="space-y-4">
+                                    {[
+                                        { label: 'Promote SY Students', desc: 'Migration to TY (Third Year)', color: 'bg-indigo-500' },
+                                        { label: 'Promote TY Students', desc: 'Migration to B.Tech (Final Year)', color: 'bg-indigo-500' },
+                                        { label: 'Process Graduation', desc: 'Clear B.Tech & M.Tech Students', color: 'bg-red-500' }
+                                    ].map((step, i) => (
+                                        <div key={i} className="flex items-center gap-6 p-5 rounded-3xl border-2 text-left transition-all hover:border-indigo-500" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
+                                            <div className={`w-3 h-3 rounded-full ${step.color} shadow-lg shadow-current/20`}></div>
+                                            <div>
+                                                <p className="font-black text-sm tracking-tight" style={{ color: 'var(--text-primary)' }}>{step.label}</p>
+                                                <p className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-60" style={{ color: 'var(--text-secondary)' }}>{step.desc}</p>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
-                            <button 
-                                onClick={handleBatchPromote}
-                                className="w-full text-white py-5 rounded-2xl font-black text-lg hover:opacity-90 transition-all shadow-2xl bg-indigo-600 hover:bg-indigo-700"
-                            >
-                                Execute Batch Promotion
-                            </button>
+
+                            <div className="p-6 bg-red-50 dark:bg-red-900/10 rounded-[2rem] border-2 border-red-100 dark:border-red-900/30">
+                                <div className="flex gap-4 items-start">
+                                    <div className="p-2 bg-red-500 rounded-xl text-white shadow-lg"><AlertCircle size={20} /></div>
+                                    <div>
+                                        <p className="font-black text-xs text-red-600 dark:text-red-400 uppercase tracking-widest">Permanent Action</p>
+                                        <p className="font-bold text-xs mt-2 leading-relaxed" style={{ color: 'var(--text-primary)' }}>Graduating students will be permanently removed from the active database. Ensure you have exported all necessary data before proceeding.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="pt-4">
+                                <button 
+                                    onClick={handleBatchPromote}
+                                    disabled={isPromoting}
+                                    className="w-full text-white py-5 md:py-6 rounded-2xl md:rounded-[2.5rem] font-black text-lg md:text-xl hover:opacity-90 transition-all shadow-2xl bg-indigo-600 shadow-indigo-500/20 transform active:scale-[0.98] disabled:opacity-50"
+                                >
+                                    {isPromoting ? 'Executing Cycle...' : 'Execute Promotion Cycle'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1650,145 +1814,116 @@ const AdminDashboard = () => {
 
             {/* Student Registration Modal */}
             {showStudentModal && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-                    <div className="w-full max-w-xl rounded-[2.5rem] overflow-hidden glass-panel animate-in zoom-in-95 duration-200">
-                        <div className="px-8 py-6 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)' }}>
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-emerald-500/10 rounded-xl text-emerald-600"><UserPlus size={24} /></div>
-                                <h3 className="text-xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Register New Student</h3>
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="w-full max-w-2xl max-h-[95vh] flex flex-col rounded-[2.5rem] md:rounded-[3.5rem] overflow-hidden animate-in fade-in zoom-in duration-500 shadow-2xl" style={{ backgroundColor: theme === 'light' ? '#ffffff' : '#1a1a1a' }}>
+                        <div className="px-8 md:px-12 py-8 md:py-10 border-b flex justify-between items-center shrink-0" style={{ backgroundColor: theme === 'light' ? '#ffffff' : '#1a1a1a', borderColor: 'var(--border-primary)' }}>
+                            <div className="flex items-center gap-5">
+                                <div className="p-3 bg-emerald-500/10 rounded-2xl text-emerald-600 shadow-inner">{editStudentId ? <Settings size={28} /> : <UserPlus size={28} />}</div>
+                                <h3 className="font-black text-2xl md:text-3xl tracking-tight" style={{ color: 'var(--text-primary)' }}>{editStudentId ? 'Edit Profile' : 'New Enrollment'}</h3>
                             </div>
-                            <button onClick={() => setShowStudentModal(false)} className="p-2 hover:bg-black/5 rounded-full transition-all"><X size={20} /></button>
+                            <button onClick={() => { setShowStudentModal(false); setEditStudentId(null); setStudentForm({ name: '', email: '', prn: '', password: '', class_id: '', batch: '' }); }} className="p-3 rounded-3xl hover:bg-black/5 dark:hover:bg-white/5 transition-all" style={{ color: 'var(--text-secondary)' }}><X size={24} /></button>
                         </div>
                         
-                        <form onSubmit={handleAddStudent} className="p-8 space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Full Name</label>
-                                    <input 
-                                        type="text" required placeholder="John Doe"
-                                        className="w-full px-5 py-3.5 border-2 rounded-xl outline-none focus:border-emerald-500 font-bold transition-all text-sm"
-                                        style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
-                                        value={studentForm.name} onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
-                                    />
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-8 md:p-12">
+                            <form onSubmit={handleAddStudent} className="space-y-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Full Legal Name</label>
+                                        <input required placeholder="John Doe" className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-emerald-500 font-bold text-sm md:text-base shadow-sm transition-all" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={studentForm.name} onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })} />
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Personal Email</label>
+                                        <input required type="email" placeholder="john@example.com" className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-emerald-500 font-bold text-sm md:text-base shadow-sm transition-all" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={studentForm.email} onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })} />
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Email ID</label>
-                                    <input 
-                                        type="email" required placeholder="john@example.com"
-                                        className="w-full px-5 py-3.5 border-2 rounded-xl outline-none focus:border-emerald-500 font-bold transition-all text-sm"
-                                        style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
-                                        value={studentForm.email} onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>PRN Number</label>
-                                    <input 
-                                        type="text" required placeholder="Enter PRN"
-                                        className="w-full px-5 py-3.5 border-2 rounded-xl outline-none focus:border-emerald-500 font-bold transition-all text-sm"
-                                        style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
-                                        value={studentForm.prn} onChange={(e) => setStudentForm({ ...studentForm, prn: e.target.value })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Login Password</label>
-                                    <input 
-                                        type="password" required placeholder="••••••••"
-                                        className="w-full px-5 py-3.5 border-2 rounded-xl outline-none focus:border-emerald-500 font-bold transition-all text-sm"
-                                        style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
-                                        value={studentForm.password} onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Assign Class</label>
-                                    <select 
-                                        required
-                                        className="w-full px-5 py-3.5 border-2 rounded-xl outline-none focus:border-emerald-500 font-bold transition-all text-sm appearance-none"
-                                        style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
-                                        value={studentForm.class_id} onChange={(e) => setStudentForm({ ...studentForm, class_id: e.target.value })}
-                                    >
-                                        <option value="">Select Class</option>
-                                        {allClasses.map(c => (
-                                            <option key={c.id} value={c.id}>{c.year} - {c.division}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest ml-2" style={{ color: 'var(--text-secondary)' }}>Assign Batch (Optional)</label>
-                                    <select 
-                                        className="w-full px-5 py-3.5 border-2 rounded-xl outline-none focus:border-emerald-500 font-bold transition-all text-sm appearance-none"
-                                        style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
-                                        value={studentForm.batch} onChange={(e) => setStudentForm({ ...studentForm, batch: e.target.value })}
-                                    >
-                                        <option value="">Full Class</option>
-                                        <option value="Batch 1">Batch 1</option>
-                                        <option value="Batch 2">Batch 2</option>
-                                        <option value="Batch 3">Batch 3</option>
-                                    </select>
-                                </div>
-                            </div>
 
-                            <div className="flex gap-4 pt-4">
-                                <button 
-                                    type="button"
-                                    onClick={() => setShowStudentModal(false)}
-                                    className="flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:opacity-70 transition-all"
-                                    style={{ backgroundColor: 'var(--bg-main)', color: 'var(--text-secondary)' }}
-                                >
-                                    Cancel
-                                </button>
-                                <button 
-                                    type="submit"
-                                    className="flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-white transition-all active:scale-95 shadow-xl bg-emerald-600 hover:bg-emerald-700"
-                                >
-                                    Register Student
-                                </button>
-                            </div>
-                        </form>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>PRN Number</label>
+                                        <input required placeholder="Enter PRN" className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-emerald-500 font-bold text-sm md:text-base shadow-sm transition-all" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={studentForm.prn} onChange={(e) => setStudentForm({ ...studentForm, prn: e.target.value })} />
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>{editStudentId ? 'Change Password (Optional)' : 'Login Password'}</label>
+                                        <input required={!editStudentId} type="password" placeholder="••••••••" className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-emerald-500 font-bold text-sm md:text-base shadow-sm transition-all" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={studentForm.password} onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })} />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Academic Class</label>
+                                        <select required className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-emerald-500 font-bold appearance-none cursor-pointer text-sm md:text-base shadow-sm transition-all" style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} value={studentForm.class_id} onChange={(e) => setStudentForm({ ...studentForm, class_id: e.target.value })}>
+                                            <option value="">Select Class</option>
+                                            {allClasses.map(c => (
+                                                <option key={c.id} value={c.id}>{c.year} - {c.division === 'No Div' ? 'GEN' : c.division}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] ml-2" style={{ color: 'var(--text-secondary)' }}>Practical Batch</label>
+                                        <input 
+                                            placeholder="e.g. Batch 1" 
+                                            className="w-full px-6 md:px-7 py-4 md:py-4.5 border-2 rounded-2xl md:rounded-[2rem] outline-none focus:border-emerald-500 font-bold text-sm md:text-base shadow-sm transition-all" 
+                                            style={{ backgroundColor: 'var(--bg-main)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }} 
+                                            value={studentForm.batch} 
+                                            onChange={(e) => setStudentForm({ ...studentForm, batch: e.target.value })} 
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="pt-6">
+                                    <button type="submit" className="w-full text-white py-5 md:py-6 rounded-2xl md:rounded-[2.5rem] font-black text-lg md:text-xl hover:opacity-90 transition-all shadow-2xl bg-emerald-600 shadow-emerald-500/20 transform active:scale-[0.98]">
+                                        {editStudentId ? 'Save Changes' : 'Register Student Profile'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>
             )}
 
             {/* Confirmation Modals */}
             {(entryToDelete || assignmentToDelete || professorToDelete || locationToDelete || showResetModal || showResetMappingModal) && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-                    <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden p-10 text-center space-y-6 glass-panel">
-                        <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto text-white shadow-xl ${showResetModal || showResetMappingModal || professorToDelete || locationToDelete ? 'bg-red-500' : 'bg-slate-900'}`}>
-                            {showResetModal || showResetMappingModal ? <RefreshCcw size={40} /> : (professorToDelete || locationToDelete) ? <Trash2 size={40} /> : <AlertCircle size={40} />}
-                        </div>
-                        
-                        <div className="space-y-2">
-                            <h3 className="text-2xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Are you sure?</h3>
-                            <p className="font-bold leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                                {showResetModal ? `This will wipe the schedule for ${selectedYear} - ${selectedDivision}.` : 
-                                 showResetMappingModal ? `This will clear all subject mappings for ${selectedYear} - ${selectedDivision}.` :
-                                 professorToDelete ? `Deleting ${professorToDelete.name} will also remove all their assignments and timetable slots.` :
-                                 assignmentToDelete ? `This mapping for ${assignmentToDelete.subject_name} will be removed.` :
-                                 locationToDelete ? `Deleting ${locationToDelete.name} will also remove all associated timetable slots.` :
-                                 `The session "${entryToDelete?.subject}" will be deleted.`}
-                            </p>
-                        </div>
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+                    <div className="w-full max-w-xl flex flex-col rounded-[2.5rem] md:rounded-[3.5rem] overflow-hidden animate-in fade-in zoom-in duration-500 shadow-2xl" style={{ backgroundColor: theme === 'light' ? '#ffffff' : '#1a1a1a' }}>
+                        <div className="p-10 md:p-12 text-center space-y-8 flex-1 overflow-y-auto custom-scrollbar">
+                            <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto text-white shadow-2xl transform hover:scale-110 transition-all duration-500 ${showResetModal || showResetMappingModal || professorToDelete || locationToDelete ? 'bg-red-500 shadow-red-500/20' : 'bg-slate-900 shadow-slate-900/20'}`}>
+                                {showResetModal || showResetMappingModal ? <RefreshCcw size={48} className="animate-spin-slow" /> : (professorToDelete || locationToDelete) ? <Trash2 size={48} /> : <AlertCircle size={48} />}
+                            </div>
+                            
+                            <div className="space-y-4">
+                                <h3 className="text-3xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Are you sure?</h3>
+                                <p className="text-sm md:text-base font-bold leading-relaxed opacity-70 px-4" style={{ color: 'var(--text-secondary)' }}>
+                                    {showResetModal ? `This will wipe the entire schedule for ${selectedYear} - ${selectedDivision}. All slots will be vacated.` : 
+                                     showResetMappingModal ? `This will clear all subject mappings for ${selectedYear} - ${selectedDivision}. Faculty assignments will be lost.` :
+                                     professorToDelete ? `Deleting ${professorToDelete.name} will also remove all their active assignments and associated timetable slots.` :
+                                     assignmentToDelete ? `This mapping for ${assignmentToDelete.subject_name} will be permanently removed.` :
+                                     locationToDelete ? `Deleting ${locationToDelete.name} will also vacate all timetable slots currently using this resource.` :
+                                     `The session "${entryToDelete?.subject}" will be deleted from the class timetable.`}
+                                </p>
+                            </div>
 
-                        <div className="flex gap-3">
-                            <button 
-                                onClick={() => { setEntryToDelete(null); setAssignmentToDelete(null); setProfessorToDelete(null); setLocationToDelete(null); setShowResetModal(false); setShowResetMappingModal(false); }}
-                                className="flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:opacity-70 transition-all"
-                                style={{ backgroundColor: 'var(--bg-main)', color: 'var(--text-secondary)' }}
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                onClick={() => {
-                                    if (showResetModal) handleResetTimetable();
-                                    else if (showResetMappingModal) handleResetMappings();
-                                    else if (professorToDelete) handleDeleteProfessor();
-                                    else if (assignmentToDelete) handleDeleteAssignment();
-                                    else if (locationToDelete) confirmDeleteLocation();
-                                    else handleDeleteEntry();
-                                }}
-                                className={`flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-white transition-all active:scale-95 shadow-xl ${showResetModal || showResetMappingModal || professorToDelete || locationToDelete ? 'bg-red-500 hover:bg-red-600' : 'bg-slate-900 hover:bg-slate-800 dark:bg-slate-800'}`}
-                            >
-                                Confirm
-                            </button>
+                            <div className="flex flex-col md:flex-row gap-4 pt-4">
+                                <button 
+                                    onClick={() => { setEntryToDelete(null); setAssignmentToDelete(null); setProfessorToDelete(null); setLocationToDelete(null); setShowResetModal(false); setShowResetMappingModal(false); }}
+                                    className="flex-1 py-5 rounded-2xl md:rounded-[2.5rem] font-black text-xs uppercase tracking-[0.2em] hover:bg-black/5 dark:hover:bg-white/5 transition-all border-2"
+                                    style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
+                                >
+                                    No, Keep it
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        if (showResetModal) handleResetTimetable();
+                                        else if (showResetMappingModal) handleResetMappings();
+                                        else if (professorToDelete) handleDeleteProfessor();
+                                        else if (assignmentToDelete) handleDeleteAssignment();
+                                        else if (locationToDelete) confirmDeleteLocation();
+                                        else handleDeleteEntry();
+                                    }}
+                                    className={`flex-1 py-5 rounded-2xl md:rounded-[2.5rem] font-black text-xs uppercase tracking-[0.2em] text-white transition-all active:scale-95 shadow-xl ${showResetModal || showResetMappingModal || professorToDelete || locationToDelete ? 'bg-red-600 hover:bg-red-700 shadow-red-600/20' : 'bg-slate-900 hover:bg-slate-800 shadow-slate-900/20 dark:bg-slate-800'}`}
+                                >
+                                    Yes, Proceed
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

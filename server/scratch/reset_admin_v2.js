@@ -13,9 +13,9 @@ const client = new Client({
 async function resetAdmin() {
     try {
         await client.connect();
-        const hash = await bcrypt.hash('admin', 10);
+        const hash = await bcrypt.hash('admin123', 10);
         await client.query('UPDATE users SET password = $1 WHERE login_id = $2', [hash, 'admin']);
-        console.log('Admin password reset successfully');
+        console.log('Admin password reset to admin123 successfully');
     } catch (err) {
         console.error('Error resetting admin password:', err);
     } finally {

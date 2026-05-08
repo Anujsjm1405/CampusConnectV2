@@ -33,7 +33,7 @@ const Login = () => {
         e.preventDefault();
         setError('');
         try {
-            const res = await axios.post('/api/auth/login', { login_id: prn, password });
+            const res = await axios.post('/api/auth/login', { login_id: prn.trim(), password });
             login(res.data.user);
             navigate(res.data.user.role === 'ADMIN' ? '/admin' : '/professor');
         } catch (err) {
@@ -46,7 +46,7 @@ const Login = () => {
         setError('');
         try {
             const res = await axios.post('/api/auth/student-login', { 
-                prn, 
+                prn: prn.trim(), 
                 password
             });
             login(res.data.user);
@@ -70,11 +70,13 @@ const Login = () => {
 
             <div className="w-full max-w-md rounded-[2.5rem] overflow-hidden glass-panel">
                 <div className="px-10 pt-10 pb-6 text-center space-y-4">
-                    <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white mx-auto shadow-lg shadow-indigo-500/20">
-                        {loginType === 'FACULTY' ? <Lock size={32} /> : <GraduationCap size={32} />}
+                    <div className="flex justify-center mb-2">
+                        <img src="/assets/logo.png" alt="College Logo" className="w-20 h-20 object-contain drop-shadow-xl" />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>CampusConnect</h1>
+                        <h1 className="text-3xl font-black tracking-tighter" style={{ color: 'var(--text-primary)' }}>
+                            Campus<span className="text-indigo-600">Connect</span>
+                        </h1>
                         <p className="font-bold uppercase tracking-[0.2em] text-[9px] mt-2" style={{ color: 'var(--text-secondary)' }}>
                             {loginType === 'FACULTY' ? 'Faculty Gateway' : 'Student Hub'}
                         </p>

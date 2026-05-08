@@ -8,7 +8,7 @@ import {
     User, Search, GraduationCap, MapPin, 
     CheckCircle2, XCircle, AlertCircle, RefreshCw,
     Timer, Coffee, Users, BookOpen, Award,
-    Check
+    Check, Hash, Fingerprint, IdCard
 } from 'lucide-react';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -33,6 +33,8 @@ const StudentDashboard = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [activeTab, setActiveTab] = useState('FACULTY');
     const [scheduleSubTab, setScheduleSubTab] = useState('TODAY');
+
+    useEffect(() => { }, []);
 
     const isCollegeHours = () => {
         const day = currentTime.getDay();
@@ -65,7 +67,7 @@ const StudentDashboard = () => {
     };
 
     useEffect(() => {
-        const socket = io('http://localhost:5000', { withCredentials: true });
+        const socket = io('http://localhost:5001', { withCredentials: true });
         socket.on('status-update', (data) => {
             const currentDay = getCurrentDayIdx() + 1;
             const currentSlot = getCurrentSlotIdx();
@@ -138,6 +140,7 @@ const StudentDashboard = () => {
     };
 
     const todayFullSchedule = getFullDailySchedule(currentDayIdx);
+    const currentLecture = todayFullSchedule.find(l => l.start_slot === currentSlotIdx && !l.isFree);
 
     if (loading) return (
         <div className="h-screen flex flex-col items-center justify-center space-y-6 bg-slate-950">
@@ -158,24 +161,27 @@ const StudentDashboard = () => {
             <div className="group p-4 md:p-6 rounded-[2rem] relative overflow-hidden h-full flex flex-col justify-between glass-panel">
                 <div className={`absolute top-0 right-0 w-20 h-20 ${status.vibrant} opacity-10 blur-2xl -mr-10 -mt-10 group-hover:opacity-20 transition-opacity`}></div>
                 <div>
-                    <div className="flex items-start justify-between mb-4 relative">
-                        <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-500 shadow-inner">
-                            <User size={24} />
+                    <div className="flex items-center justify-between mb-4 relative">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-500 shadow-inner">
+                            <User size={20} />
                         </div>
                         <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border ${status.vibrant} ${status.text} shadow-sm`}>
                             {status.icon} {status.label}
                         </div>
                     </div>
-                    <div className="relative mb-3">
-                        <h3 className="font-black text-lg leading-tight mb-0.5 truncate" style={{ color: 'var(--text-primary)' }}>{prof.name}</h3>
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-40 truncate" style={{ color: 'var(--text-secondary)' }}>{prof.designation || 'Assistant Professor'}</p>
+                    <div className="relative mb-3 flex flex-col gap-1">
+                        <h3 className="font-black text-lg leading-tight truncate" style={{ color: 'var(--text-primary)' }}>{prof.name}</h3>
+                        <div className="flex items-center gap-1.5 opacity-50">
+                            <Award size={10} className="shrink-0 text-indigo-500" />
+                            <p className="text-[9px] font-black uppercase tracking-[0.2em] truncate" style={{ color: 'var(--text-secondary)' }}>{prof.designation || 'Assistant Professor'}</p>
+                        </div>
                     </div>
                 </div>
                 {isSemester && assignedSubjects.length > 0 && (
                     <div className="relative mt-auto pt-3 border-t border-white/5">
                         <div className="flex flex-wrap gap-1.5">
                             {assignedSubjects.map((sub, idx) => (
-                                <span key={idx} className="px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-500 text-[8px] font-black uppercase tracking-tighter">
+                                <span key={idx} className="px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase tracking-tight border border-indigo-500/20">
                                     {sub}
                                 </span>
                             ))}
@@ -188,82 +194,149 @@ const StudentDashboard = () => {
 
     return (
         <div className="min-h-screen relative overflow-x-hidden transition-colors duration-500 pb-10" style={{ backgroundColor: 'var(--bg-main)' }}>
-            <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-0 overflow-hidden">
-                <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-indigo-500/20 rounded-full blur-[120px] animate-pulse"></div>
-                <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-500/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '2s' }}></div>
+            <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-0 overflow-hidden opacity-60">
+                <div className="absolute top-[-10%] left-[-10%] w-[70%] h-[70%] bg-indigo-500/30 rounded-full blur-[120px]"></div>
+                <div className="absolute bottom-[-10%] right-[-10%] w-[70%] h-[70%] bg-purple-500/20 rounded-full blur-[120px]"></div>
             </div>
 
-            <header className="sticky top-0 z-[100] border-b backdrop-blur-3xl" style={{ backgroundColor: 'rgba(var(--bg-card-rgb), 0.5)', borderColor: 'rgba(255, 255, 255, 0.05)' }}>
-                <div className="max-w-7xl mx-auto px-4 md:px-8 h-14 md:h-16 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center text-white shadow-lg transform rotate-3">
-                            <GraduationCap size={24} />
-                        </div>
-                        <div>
-                            <h1 className="font-black text-lg md:text-xl tracking-tighter" style={{ color: 'var(--text-primary)' }}>Campus<span className="text-indigo-500">Connect</span></h1>
-                            <div className="flex items-center gap-2">
-                                <span className="text-[8px] font-black uppercase tracking-widest text-indigo-500/60">{user.year} {user.division}</span>
-                                <span className="text-[8px] font-black px-1.5 py-0.5 bg-indigo-500/10 text-indigo-500 rounded uppercase">{user.batch}</span>
-                            </div>
+            <header className="sticky top-0 z-[100] border-b backdrop-blur-3xl" style={{ backgroundColor: 'var(--bg-header)', borderColor: 'var(--border-primary)' }}>
+                <div className="max-w-7xl mx-auto px-4 md:px-8 h-16 md:h-20 flex items-center justify-between gap-4">
+                    {/* Left: Logo */}
+                    <div className="flex-1 flex items-center">
+                        <img src="/assets/logo.png" alt="Logo" className="w-10 h-10 md:w-12 md:h-12 object-contain" />
+                    </div>
+
+                    {/* Center: Branding */}
+                    <div className="hidden lg:flex flex-col items-center flex-1 text-center">
+                        <h2 className="text-2xl font-black tracking-tighter" style={{ color: 'var(--text-primary)' }}>
+                            Campus<span className="text-indigo-600">Connect</span>
+                        </h2>
+                        <div className="flex items-center gap-2 font-black text-[10px] uppercase tracking-[0.3em]">
+                            <span className="font-black" style={{ color: 'var(--text-primary)' }}>STUDENT PORTAL</span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button onClick={toggleTheme} className="p-2 rounded-xl active:scale-90 glass-panel">
-                            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+
+                    {/* Right: Actions & Small Clock */}
+                    <div className="flex items-center gap-2 flex-1 justify-end">
+                        <div className="hidden xl:flex flex-col items-end mr-4">
+                            <div className="flex items-center gap-2 font-black text-[9px] uppercase tracking-widest text-indigo-500">
+                                <Clock size={10} />
+                                <span>{currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+                            </div>
+                            <div className="font-bold text-[9px] opacity-40 uppercase" style={{ color: 'var(--text-secondary)' }}>
+                                {currentTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                            </div>
+                        </div>
+                        <button onClick={toggleTheme} className="p-2 md:p-3 rounded-xl active:scale-95 glass-panel">
+                            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
                         </button>
-                        <button onClick={logout} className="p-2 rounded-xl hover:text-red-500 glass-panel">
-                            <LogOut size={16} />
+                        <button onClick={logout} className="p-2 md:p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all active:scale-95 dark:bg-red-900/20 dark:text-red-400">
+                            <LogOut size={18} />
                         </button>
                     </div>
                 </div>
             </header>
 
             <main className="relative z-10 max-w-7xl mx-auto px-4 md:px-8 pt-4 md:pt-6 space-y-6">
-                <section className="p-6 md:p-8 rounded-[2.5rem] relative overflow-hidden group glass-panel">
-                    <div className="absolute top-0 right-0 w-60 h-60 bg-indigo-500/10 rounded-full blur-[60px] -mr-30 -mt-30 group-hover:bg-indigo-500/20 transition-all duration-700"></div>
-                    <div className="relative flex items-center justify-between gap-6">
-                        <div className="space-y-1">
-                            <h2 className="text-5xl md:text-7xl font-black tracking-tighter" style={{ color: 'var(--text-primary)' }}>
-                                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
-                            </h2>
-                            <p className="font-black text-sm md:text-base uppercase tracking-widest opacity-60" style={{ color: 'var(--text-secondary)' }}>
-                                {currentTime.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 items-stretch">
+                    {/* Left: Compact Profile Card */}
+                    <section className="p-4 md:p-6 rounded-[2rem] relative overflow-hidden group glass-panel flex flex-col justify-center">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-[40px] -mr-16 -mt-16"></div>
+                        <div className="relative space-y-3">
+                            <p className="font-black text-[10px] md:text-xs uppercase tracking-[0.3em] mb-1 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                {(() => {
+                                    const hour = currentTime.getHours();
+                                    if (hour < 12) return <><Coffee size={14} className="text-amber-500" /> Good Morning</>;
+                                    if (hour < 17) return <><Sun size={14} className="text-orange-500" /> Good Afternoon</>;
+                                    return <><Moon size={14} className="text-indigo-400" /> Good Evening</>;
+                                })()}
                             </p>
+                            <div className="space-y-1">
+                                <h2 className="text-xl md:text-2xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                                    {user.name}
+                                </h2>
+                                <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-2">
+                                        <GraduationCap size={12} className="text-indigo-500 opacity-60" />
+                                        <p className="text-[9px] md:text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-primary)' }}>
+                                            {user.year} {user.division} • Batch {user.batch}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <IdCard size={12} className="text-indigo-500 opacity-60" />
+                                        <p className="text-[9px] md:text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-primary)' }}>
+                                            PRN: {user.prn}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div className="flex flex-col items-end justify-center">
-                            <span className={`px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl transition-all duration-500 ${isCollegeHours() ? 'bg-emerald-500 text-white shadow-emerald-500/20' : 'bg-slate-500 text-white shadow-slate-500/20'}`}>
-                                {isCollegeHours() ? '• Campus Active' : '• Off Hours'}
-                            </span>
-                        </div>
-                    </div>
-                </section>
+                    </section>
 
-                <div className="flex gap-2 p-1.5 rounded-2xl sticky top-20 z-50 glass-panel">
-                    <button 
-                        onClick={() => setActiveTab('FACULTY')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] transition-all ${activeTab === 'FACULTY' ? 'bg-indigo-600 text-white shadow-lg' : 'opacity-40 hover:opacity-100'}`}
-                    >
-                        <Users size={16} /> FACULTY
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('SCHEDULE')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] transition-all ${activeTab === 'SCHEDULE' ? 'bg-indigo-600 text-white shadow-lg' : 'opacity-40 hover:opacity-100'}`}
-                    >
-                        <Calendar size={16} /> SCHEDULE
-                    </button>
+                    {/* Middle: Live Status Card */}
+                    <section className="p-4 md:p-6 rounded-[2rem] relative overflow-hidden group glass-panel flex flex-col justify-center">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-[40px] -mr-16 -mt-16"></div>
+                        <div className="relative space-y-4">
+                            <div className="flex items-center justify-between">
+                                <p className="font-black text-[9px] uppercase tracking-widest opacity-40" style={{ color: 'var(--text-primary)' }}>Current Status</p>
+                                <span className={`px-3 py-1 rounded-full font-black text-[9px] uppercase tracking-widest shadow-lg shadow-indigo-500/10 ${isCollegeHours() ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-white'}`}>
+                                    {isCollegeHours() ? '• Active' : '• Inactive'}
+                                </span>
+                            </div>
+                            
+                            {isCollegeHours() ? (
+                                <div className="space-y-1">
+                                    <p className="font-black text-[9px] uppercase tracking-widest opacity-40" style={{ color: 'var(--text-primary)' }}>Ongoing Session</p>
+                                    <h3 className="text-lg md:text-xl font-black tracking-tight truncate" style={{ color: 'var(--text-primary)' }}>
+                                        {currentLecture ? currentLecture.subject : 'AVAILABLE SLOT'}
+                                    </h3>
+                                    {currentLecture && (
+                                        <div className="flex items-center gap-2 opacity-60">
+                                            <span className="text-[9px] font-black uppercase bg-indigo-500/10 px-1.5 py-0.5 rounded-md">{currentLecture.session_type}</span>
+                                            <span className="text-[9px] font-bold uppercase truncate">with {currentLecture.professor_name}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="space-y-1 opacity-40">
+                                    <p className="font-black text-[9px] uppercase tracking-widest">Ongoing Session</p>
+                                    <h3 className="text-lg font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>OFF CAMPUS HOURS</h3>
+                                </div>
+                            )}
+                        </div>
+                    </section>
+
+                    {/* Right: Controls - Vertical Stack */}
+                    <div className="flex flex-col gap-2">
+                        <button 
+                            onClick={() => setActiveTab('FACULTY')}
+                            className={`w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-black text-[10px] tracking-[0.2em] transition-all glass-panel ${activeTab === 'FACULTY' ? 'bg-indigo-600 text-white shadow-lg border-indigo-500' : 'opacity-60 hover:opacity-100'}`}
+                        >
+                            <Users size={16} /> FACULTY
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('SCHEDULE')}
+                            className={`w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-black text-[10px] tracking-[0.2em] transition-all glass-panel ${activeTab === 'SCHEDULE' ? 'bg-indigo-600 text-white shadow-lg border-indigo-500' : 'opacity-60 hover:opacity-100'}`}
+                        >
+                            <Calendar size={16} /> SCHEDULE
+                        </button>
+                        
+                        {activeTab === 'FACULTY' && (
+                            <div className="relative animate-in slide-in-from-top-2 duration-300 h-full">
+                                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-indigo-500" size={16} />
+                                <input 
+                                    placeholder="Search faculty..."
+                                    className="w-full h-full pl-12 pr-6 py-3.5 text-sm rounded-2xl outline-none focus:border-indigo-500 glass-panel"
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                />
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {activeTab === 'FACULTY' ? (
                     <div className="space-y-8">
-                        <div className="relative max-w-md mx-auto">
-                            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-indigo-500" size={16} />
-                            <input 
-                                placeholder="Search faculty..."
-                                className="w-full pl-12 pr-6 py-3.5 text-sm rounded-2xl outline-none focus:border-indigo-500 glass-panel"
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                            />
-                        </div>
 
                         <section>
                             <h2 className="font-black text-xl mb-4 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
@@ -376,9 +449,13 @@ const StudentDashboard = () => {
                                                         return (
                                                             <td key={day} className={`p-3 rounded-xl transition-all relative min-h-[60px] text-center ${colorClass}`}>
                                                                 {lecture ? (
-                                                                    <div className="space-y-1">
+                                                                    <div className="space-y-1" style={{ color: 'var(--text-primary)' }}>
                                                                         <p className="font-black text-[10px] leading-tight tracking-tighter">{lecture.subject}</p>
-                                                                        <p className="text-[8px] font-bold opacity-60 truncate">{lecture.professor_name}</p>
+                                                                        <p className="text-[8px] font-black opacity-60 truncate">{lecture.professor_name}</p>
+                                                                        <div className="flex items-center justify-center gap-1 opacity-50 mt-1">
+                                                                            <MapPin size={10} className="md:w-3 md:h-3" /> 
+                                                                            <span className="truncate font-black text-[8px]">{lecture ? lecture.location_name : 'Campus'}</span>
+                                                                        </div>
                                                                     </div>
                                                                 ) : <Check size={14} className="mx-auto opacity-30" />}
                                                             </td>

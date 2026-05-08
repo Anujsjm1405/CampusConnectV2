@@ -13,9 +13,10 @@ router.get('/timetable/:id', requireProfessor, async (req, res) => {
         }
         
         const query = `
-            SELECT t.*, c.year, c.division 
+            SELECT t.*, c.year, c.division, l.name as location_name
             FROM timetable t
             JOIN classes c ON t.class_id = c.id
+            LEFT JOIN locations l ON t.location_id = l.id
             WHERE t.professor_id = $1
             ORDER BY t.day_of_week ASC, t.start_slot ASC
         `;

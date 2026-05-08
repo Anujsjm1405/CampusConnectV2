@@ -24,7 +24,7 @@ const STATUS_CONFIG = {
     'LAB': { label: 'In Lab', color: 'bg-amber-500/10 border-amber-500/20', text: 'text-amber-600 dark:text-amber-400', dot: 'bg-amber-500', icon: Coffee },
     'AVAILABLE': { label: 'Available', color: 'bg-emerald-500/10 border-emerald-500/20', text: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500', icon: CheckCircle2 },
     'BUSY': { label: 'Busy', color: 'bg-violet-500/10 border-violet-500/20', text: 'text-violet-600 dark:text-violet-400', dot: 'bg-violet-500', icon: AlertCircle },
-    'LEAVE': { label: 'On Leave', color: 'bg-slate-900/10 border-slate-900/20', text: 'text-slate-900 dark:text-slate-100', dot: 'bg-slate-900 dark:bg-slate-100', icon: X },
+    'LEAVE': { label: 'On Leave', color: 'bg-slate-700 text-white border-slate-600', text: 'text-white', dot: 'bg-slate-700 dark:bg-slate-500', icon: X },
 };
 
 const ProfessorDashboard = () => {
@@ -32,7 +32,7 @@ const ProfessorDashboard = () => {
     const { theme, toggleTheme } = useContext(ThemeContext);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [timetable, setTimetable] = useState([]);
-    
+
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
@@ -67,6 +67,25 @@ const ProfessorDashboard = () => {
         return -1;
     };
 
+    const fetchData = async () => {
+        try {
+            const [timeRes, statusRes] = await Promise.all([
+                axios.get(`/api/professors/timetable/${user.id}`),
+                axios.get(`/api/professors/status/${user.id}`)
+            ]);
+            setTimetable(timeRes.data);
+            setOverrides(statusRes.data);
+            setLoading(false);
+        } catch (err) {
+            console.error(err);
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
     const fetchLocations = async () => {
         try {
             const slotId = getCurrentSlotId(currentTime);
@@ -82,25 +101,6 @@ const ProfessorDashboard = () => {
             fetchLocations();
         }
     }, [activeTab, Math.floor(currentTime.getTime() / 60000)]); // re-run once a minute
-
-    useEffect(() => {
-        fetchData();
-    }, []);
-
-    const fetchData = async () => {
-        try {
-            const [timeRes, statusRes] = await Promise.all([
-                axios.get(`/api/professors/timetable/${user.id}`),
-                axios.get(`/api/professors/status/${user.id}`)
-            ]);
-            setTimetable(timeRes.data);
-            setOverrides(statusRes.data);
-            setLoading(false);
-        } catch (err) {
-            console.error(err);
-            setLoading(false);
-        }
-    };
 
     const handleStatusUpdate = async (status) => {
         try {
@@ -172,36 +172,25 @@ const ProfessorDashboard = () => {
     );
 
     return (
-        <div className="min-h-screen pb-20 transition-colors duration-300 font-sans" style={{ backgroundColor: 'var(--bg-main)', color: 'var(--text-primary)' }}>
+        <div className="min-h-screen pb-20 transition-colors duration-300 font-sans relative overflow-x-hidden" style={{ backgroundColor: 'var(--bg-main)', color: 'var(--text-primary)' }}>
+            <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-0 overflow-hidden opacity-60">
+                <div className="absolute top-[-10%] left-[-10%] w-[70%] h-[70%] bg-indigo-500/30 rounded-full blur-[120px]"></div>
+                <div className="absolute bottom-[-10%] right-[-10%] w-[70%] h-[70%] bg-purple-500/20 rounded-full blur-[120px]"></div>
+            </div>
             {/* Header */}
-            <header className="border-b px-4 md:px-6 py-4 md:py-6 sticky top-0 z-30 shadow-sm flex justify-between items-center backdrop-blur-md transition-colors duration-300" style={{ backgroundColor: 'var(--bg-header)', borderColor: 'var(--border-primary)' }}>
-                <div className="flex items-center gap-3 md:gap-6">
-                    <div className="flex items-center gap-3 md:gap-4">
-                        <div className="w-10 h-10 md:w-12 md:h-12 bg-indigo-600 rounded-xl md:rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-100">
-                            <Calendar size={24} className="md:w-7 md:h-7" />
-                        </div>
-                        <div className="flex flex-col">
-                            <h1 className="text-lg md:text-2xl font-black tracking-tight leading-none" style={{ color: 'var(--text-primary)' }}>
-                                <span className="hidden xs:inline">Professor </span>Portal
-                            </h1>
-                            <p className="font-bold text-[10px] md:text-xs mt-0.5 md:mt-1 uppercase tracking-wider truncate max-w-[120px] md:max-w-none" style={{ color: 'var(--text-secondary)' }}>{user.name}</p>
-                        </div>
-                    </div>
-
-                    <div className="h-10 w-px hidden lg:block" style={{ backgroundColor: 'var(--border-primary)' }}></div>
-
-                    <div className="hidden lg:flex flex-col">
-                        <div className="flex items-center gap-2 font-black text-[10px] uppercase tracking-widest" style={{ color: 'var(--accent-primary)' }}>
-                            <Clock size={12} />
-                            <span>System Live Status</span>
-                        </div>
-                        <div className="font-black text-xs" style={{ color: 'var(--text-primary)' }}>
-                            {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-                            <span className="mx-2" style={{ color: 'var(--text-secondary)', opacity: 0.3 }}>|</span>
-                            <span style={{ color: 'var(--accent-primary)' }}>{currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                        </div>
+            <header className="border-b px-4 md:px-8 py-4 md:py-6 sticky top-0 z-30 shadow-sm flex items-center justify-between backdrop-blur-md transition-colors duration-300" style={{ backgroundColor: 'var(--bg-header)', borderColor: 'var(--border-primary)' }}>
+                <div className="flex-1 flex items-center">
+                    <img src="/assets/logo.png" alt="Logo" className="w-10 h-10 md:w-12 md:h-12 object-contain" />
+                </div>
+                <div className="flex flex-col items-center flex-1 text-center">
+                    <h2 className="text-2xl font-black tracking-tighter" style={{ color: 'var(--text-primary)' }}>
+                        Campus<span className="text-indigo-600">Connect</span>
+                    </h2>
+                    <div className="flex items-center gap-2 font-black text-[10px] uppercase tracking-[0.3em]">
+                        <span className="font-black" style={{ color: 'var(--text-primary)' }}>FACULTY PORTAL</span>
                     </div>
                 </div>
+                <div className="flex items-center gap-1.5 md:gap-3 flex-1 justify-end">
                 <div className="flex gap-1.5 md:gap-2">
                     <button 
                         onClick={toggleTheme}
@@ -225,7 +214,48 @@ const ProfessorDashboard = () => {
                         <LogOut size={18} className="md:w-5 md:h-5" />
                     </button>
                 </div>
-            </header>
+            </div>
+        </header>
+
+            <div className="max-w-4xl mx-auto px-4 md:px-8 mt-6 md:mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
+                {/* Card 1: Greeting & Name */}
+                <div className="p-3 md:p-5 rounded-[1.5rem] glass-panel relative overflow-hidden group flex flex-col justify-center min-h-[80px]">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition-all duration-700"></div>
+                    <div className="relative">
+                        <p className="font-black text-[9px] uppercase tracking-[0.3em] mb-0.5" style={{ color: 'var(--text-primary)' }}>
+                            {(() => {
+                                const hour = currentTime.getHours();
+                                if (hour < 12) return 'Good Morning,';
+                                if (hour < 17) return 'Good Afternoon,';
+                                return 'Good Evening,';
+                            })()}
+                        </p>
+                        <h1 className="text-lg md:text-xl font-black tracking-tight text-indigo-600 dark:text-indigo-400">
+                            {user.name}
+                        </h1>
+                    </div>
+                </div>
+
+                {/* Card 2: Time & Date */}
+                <div className="p-3 md:p-5 rounded-[1.5rem] glass-panel relative overflow-hidden group flex flex-col justify-center min-h-[80px]">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-2xl group-hover:bg-purple-500/10 transition-all duration-700"></div>
+                    <div className="relative flex items-center justify-between gap-4">
+                        <div className="space-y-0">
+                            <p className="font-black text-[9px] uppercase tracking-[0.3em]" style={{ color: 'var(--text-primary)' }}>
+                                {currentTime.toLocaleDateString('en-US', { weekday: 'long' })}
+                            </p>
+                            <p className="text-xs md:text-sm font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-primary)' }}>
+                                {currentTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-xl md:text-2xl font-black tracking-tighter" style={{ color: 'var(--text-primary)' }}>
+                                {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <nav className="max-w-2xl mx-auto mt-6 md:mt-8 px-4">
                 <div className="p-1 rounded-2xl flex gap-1 shadow-inner border transition-colors duration-300" style={{ backgroundColor: 'var(--border-secondary)', borderColor: 'var(--border-primary)' }}>
@@ -296,9 +326,21 @@ const ProfessorDashboard = () => {
                         </div>
                     ) : (
                         <div className="space-y-4 md:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <div className="flex items-center justify-between px-4">
-                                <h2 className="text-xl md:text-3xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>{DAYS[todayDay]}</h2>
-                                <span className="px-3 md:px-4 py-1 md:py-1.5 rounded-full font-black text-[8px] md:text-[10px] uppercase tracking-[0.2em]" style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent-primary)' }}>Live Status</span>
+                            <div className="flex flex-col md:flex-row md:items-center justify-between px-4 gap-4">
+                                <div>
+                                    <h2 className="text-2xl md:text-5xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>{DAYS[todayDay]}</h2>
+                                </div>
+                                <div className="flex flex-col items-end">
+                                    <span className={`px-4 py-2 rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-[0.2em] shadow-xl transition-all duration-500 ${(() => {
+                                        const nowMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+                                        return (todayDay !== 0 && todayDay !== 6) && (nowMinutes >= 540 && nowMinutes < 1050);
+                                    })() ? 'bg-emerald-600 text-white shadow-emerald-500/20' : 'bg-slate-700 text-white shadow-slate-500/20'}`}>
+                                        {(() => {
+                                            const nowMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+                                            return (todayDay !== 0 && todayDay !== 6) && (nowMinutes >= 540 && nowMinutes < 1050);
+                                        })() ? '• Active' : '• Inactive'}
+                                    </span>
+                                </div>
                             </div>
                             
                             <div className="grid gap-3 md:gap-4">
@@ -351,7 +393,7 @@ const ProfessorDashboard = () => {
                                                 </div>
                                                 <div className="flex items-center gap-1 md:gap-1.5 font-bold text-[8px] md:text-[10px] mt-0.5 md:mt-1" style={{ color: 'var(--text-secondary)' }}>
                                                     <MapPin size={10} className="md:w-3 md:h-3" /> 
-                                                    <span className="truncate">{entry ? entry.location : 'Campus'}</span>
+                                                    <span className="truncate">{entry ? entry.location_name : 'Campus'}</span>
                                                 </div>
                                             </div>
 
@@ -448,14 +490,14 @@ const ProfessorDashboard = () => {
                                                     onClick={() => setShowStatusModal({ day: dayIdx, slot: slot.id, currentStatus: status })}
                                                     className={`rounded-xl md:rounded-2xl p-2 md:p-3 border shadow-sm transition-all cursor-pointer hover:scale-[1.02] active:scale-95 group relative ${config.color} border-white/10`}
                                                 >
-                                                    <div className={`text-[7px] md:text-[8px] font-black uppercase tracking-widest ${config.text} opacity-60 mb-1`}>
+                                                    <div className="text-[7px] md:text-[8px] font-black uppercase tracking-widest opacity-40 mb-1" style={{ color: 'var(--text-primary)' }}>
                                                         {slot.time.split(' – ')[0]}
                                                     </div>
-                                                    <div className={`font-black text-[9px] md:text-[11px] leading-tight ${config.text} truncate`}>
+                                                    <div className="font-black text-[9px] md:text-[11px] leading-tight truncate" style={{ color: 'var(--text-primary)' }}>
                                                         {entry ? entry.subject : config.label}
                                                     </div>
-                                                    <div className={`text-[7px] md:text-[8px] font-bold ${config.text} opacity-40 mt-0.5 truncate`}>
-                                                        {entry ? entry.location : 'Campus'}
+                                                    <div className="text-[7px] md:text-[8px] font-black opacity-40 mt-0.5 truncate" style={{ color: 'var(--text-primary)' }}>
+                                                        {entry ? entry.location_name : 'Campus'}
                                                     </div>
                                                     
                                                     {entry && (

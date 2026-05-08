@@ -44,9 +44,10 @@ router.get('/timetable', requireStudent, async (req, res) => {
     try {
         const { class_id, batch } = req.session.user;
         const query = `
-            SELECT t.*, u.name as professor_name
+            SELECT t.*, u.name as professor_name, l.name as location_name
             FROM timetable t
             JOIN users u ON t.professor_id = u.id
+            LEFT JOIN locations l ON t.location_id = l.id
             WHERE t.class_id = $1 
             AND (t.session_type != 'LAB' OR t.batch = $2)
             ORDER BY t.day_of_week ASC, t.start_slot ASC
